@@ -1,0 +1,8 @@
+.install{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 14px;margin-bottom:14px}
+.install>div{flex:1;min-width:0}
+.install b{display:block;font-family:"Rubik",sans-serif;font-size:15px}
+.install span{font-size:13.5px;color:var(--muted)}
+.ios-share{display:inline-block;vertical-align:-3px}
+body.standalone .install{display:none!important}
+.foot .small{opacity:.8}
+.rowline{display:flex;justify-content:space-between;gap:10px;align-items:center}

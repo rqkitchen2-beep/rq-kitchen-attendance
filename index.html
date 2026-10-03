@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RQ Kitchen — الحضور والانصراف</title>
+<meta name="theme-color" content="#1C1917">
+<meta name="description" content="تطبيق الحضور والانصراف لفريق RQ Kitchen">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RQ حضور">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Rubik:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="hero">
+  <div class="hero-in">
+    <div class="bar">
+      <div class="mark logo-bg" role="img" aria-label="RQ Kitchen"></div>
+      <div class="bt"><span>الحضور والانصراف</span></div>
+      <span class="net" id="netState">جاري الاتصال…</span>
+      <button class="btn small mustard hidden" id="signOutTop">خروج</button>
+    </div>
+    <div class="clock">
+      <div class="time" id="clockTime">--:--</div>
+      <div class="date" id="clockDate"></div>
+      <div class="tagline">Good Food Bigger Mood</div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs hidden" role="tablist"><div class="tabs-in">
+  <button role="tab" data-tab="punch" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>تسجيل</span></button>
+  <button role="tab" data-tab="mine" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>تقاريري</span><span class="badge hidden" id="navBadge"></span></button>
+  <button role="tab" data-tab="today" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>اليوم</span></button>
+  <button role="tab" data-tab="sched" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>الجدول</span></button>
+  <button role="tab" data-tab="reports" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>التقارير</span></button>
+  <button role="tab" data-tab="settings" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span>الإعدادات</span><span class="badge hidden" id="setBadge"></span></button>
+</div></nav>
+
+<div class="wrap">
+  <div class="install hidden" id="installBar">
+    <div><b>ثبّت التطبيق على جوالك</b><span id="installHint">للوصول السريع كل يوم.</span></div>
+    <button class="btn small mustard" id="installBtn">تثبيت</button>
+    <button class="btn small alt" id="installClose" aria-label="إغلاق">✕</button>
+  </div>
+
+  <!-- ================= Punch / auth ================= -->
+  <section id="tab-punch">
+    <div class="panel hidden" id="bootBox"><p class="muted" style="margin:0">جاري التحميل…</p></div>
+
+    <div class="panel hidden" id="loginBox">
+      <h2>تسجيل الدخول</h2>
+      <div><label for="lgEmail">البريد الإلكتروني</label><input id="lgEmail" type="email" inputmode="email" autocomplete="username" dir="ltr"></div>
+      <div style="margin-top:12px"><label for="lgPin">الرقم السري</label><input id="lgPin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password"></div>
+      <div class="actions"><button class="btn" id="lgBtn">دخول</button></div>
+      <div id="lgMsg"></div>
+      <p class="small muted" style="margin:16px 0 4px">موظف جديد؟ <button class="linkbtn" id="toReg">سجّل حسابك</button></p>
+      <p class="small muted" style="margin:0"><button class="linkbtn" id="toForgot">نسيت الرقم السري؟</button></p>
+    </div>
+
+    <div class="panel hidden" id="regBox">
+      <h2>تسجيل موظف جديد</h2>
+      <p class="muted small" style="margin:-6px 0 14px">اكتب بياناتك واختر رقماً سرياً من 4 إلى 6 أرقام. بعد اعتماد المدير لحسابك يفتح لك اختيار الفرع وتسجيل الحضور في مواعيد الدوام.</p>
+      <div><label for="rgName">الاسم الكامل</label><input id="rgName" autocomplete="name"></div>
+      <div style="margin-top:12px"><label for="rgEmail">البريد الإلكتروني</label><input id="rgEmail" type="email" inputmode="email" autocomplete="email" dir="ltr"></div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="rgPin">الرقم السري (4 إلى 6 أرقام)</label><input id="rgPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+        <div><label for="rgPin2">تأكيد الرقم السري</label><input id="rgPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+      </div>
+      <div class="actions"><button class="btn mustard" id="rgBtn">إنشاء حسابي</button><button class="btn alt" data-back>رجوع</button></div>
+      <div id="rgMsg"></div>
+    </div>
+
+    <div class="panel hidden" id="forgotBox">
+      <h2>نسيت الرقم السري</h2>
+      <p class="muted" style="margin:0">تواصل مع المدير ليعيّن لك رقماً سرياً جديداً، ثم ادخل به وغيّره من «تقاريري».</p>
+      <div class="actions"><button class="btn alt" data-back>رجوع</button></div>
+    </div>
+
+    <div class="panel hidden" id="pendingBox">
+      <h2 id="pdTitle">حسابك بانتظار الاعتماد</h2>
+      <p class="muted" style="margin:0" id="pdText">أرسلنا بياناتك للمدير. بمجرد اعتماد حسابك يفتح لك تسجيل الحضور هنا تلقائياً.</p>
+      <div class="actions"><button class="btn alt" id="pdRefresh">تحديث</button><button class="btn alt" id="pdOut">خروج</button></div>
+    </div>
+
+    <div class="panel hidden" id="mgrHome">
+      <h2>أهلاً بك</h2>
+      <p class="muted" style="margin:0">أنت داخل كمدير. من القائمة تصل إلى الحضور اليوم والجدول والتقارير والإعدادات.</p>
+    </div>
+
+    <div class="ticket hidden" id="ticket">
+      <div class="head">
+        <div>
+          <div class="name" id="tName"></div>
+          <div class="muted small" id="tMeta"></div>
+        </div>
+        <button class="btn alt small bell" id="bellBtn" aria-label="التنبيهات"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="badge hidden" id="bellCount"></span></button>
+      </div>
+      <div class="perf"></div>
+      <div class="body">
+        <div class="closed hidden" id="closedNote"></div>
+        <div id="pickWrap" style="margin-bottom:22px">
+          <div class="small muted" style="margin-bottom:8px" id="pickLabel">في أي فرع تداوم الآن؟</div>
+          <div class="checks" id="branchPick" role="radiogroup" style="justify-content:center"></div>
+        </div>
+        <button class="punch in" id="punchBtn">حضور<small>اضغط للتسجيل</small></button>
+        <div class="stamp" id="tStamp"></div>
+        <div class="status" id="punchMsg"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Employee: my report ================= -->
+  <section id="tab-mine" class="hidden">
+    <div class="panel hidden" id="notesPanel">
+      <h3>التنبيهات</h3>
+      <ul class="notes" id="notesList"></ul>
+    </div>
+    <div class="panel">
+      <div class="branchHead"><h2 style="margin:0" id="mineTitle">تقريري</h2>
+        <input type="month" id="mineMonth" style="width:auto"></div>
+      <div class="sums" id="mineSums" style="margin-top:16px"></div>
+      <p class="small muted" id="mineNote" style="margin:0"></p>
+    </div>
+    <div class="panel">
+      <h3>تفاصيل راتبك</h3>
+      <div id="mySalary"></div>
+    </div>
+    <div class="panel">
+      <h3>سجل الأيام</h3>
+      <div class="scroll"><table id="mineTable"></table></div>
+    </div>
+    <div class="panel">
+      <h3>تغيير الرقم السري</h3>
+      <div><label for="cpOld">الرقم السري الحالي</label><input id="cpOld" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password"></div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="cpPin">الرقم السري الجديد (4 إلى 6 أرقام)</label><input id="cpPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+        <div><label for="cpPin2">تأكيد الرقم السري</label><input id="cpPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+      </div>
+      <div class="actions"><button class="btn alt" id="cpBtn">حفظ الرقم الجديد</button><button class="btn alt" id="mineOut">تسجيل الخروج</button></div>
+      <div id="cpMsg"></div>
+    </div>
+  </section>
+
+  <!-- ================= Manager: today ================= -->
+  <section id="tab-today" class="hidden"><div id="todayBox"></div></section>
+
+  <!-- ================= Manager: schedule ================= -->
+  <section id="tab-sched" class="hidden">
+    <div class="panel">
+      <h2>جدول الدوام</h2>
+      <p class="muted small">غيّر موعد أي موظف ليوم محدد أو اجعله إجازة. بدون تغيير يُطبَّق موعد الفرع الذي يسجل فيه.</p>
+      <div class="row">
+        <div><label for="scDay">اليوم</label><input type="date" id="scDay"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end"><button class="btn alt" id="scPrev">اليوم السابق</button><button class="btn alt" id="scNext">اليوم التالي</button></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="scAll">تطبيق على الجميع</label>
+          <select id="scAll"><option value="">اختر…</option><option value="def">حسب موعد الفرع</option><option value="off">إجازة</option><option value="custom">موعد مخصص</option></select></div>
+        <div class="row hidden" id="scAllTimes" style="grid-template-columns:1fr 1fr">
+          <div><label for="scAllS">من</label><input type="time" id="scAllS" value="14:00"></div>
+          <div><label for="scAllE">إلى</label><input type="time" id="scAllE" value="00:30"></div>
+        </div>
+      </div>
+      <div class="actions"><button class="btn alt" id="scApplyAll">تطبيق على الجميع</button></div>
+    </div>
+    <div class="panel"><div id="scList"></div>
+      <div class="actions"><button class="btn mustard" id="scSave">حفظ جدول اليوم</button><button class="btn alt" id="scCopy">نسخ إلى اليوم التالي</button></div>
+      <div id="scMsg"></div>
+    </div>
+  </section>
+
+  <!-- ================= Manager: reports ================= -->
+  <section id="tab-reports" class="hidden">
+    <div class="panel">
+      <h2>التقارير</h2>
+      <div class="row3">
+        <div><label for="rFrom">من</label><input type="date" id="rFrom"></div>
+        <div><label for="rTo">إلى</label><input type="date" id="rTo"></div>
+        <div><label for="rBranch">الفرع</label><select id="rBranch"></select></div>
+      </div>
+      <div class="actions">
+        <button class="btn alt" data-range="month">هذا الشهر</button>
+        <button class="btn alt" data-range="last">الشهر الماضي</button>
+        <button class="btn alt" data-range="week">آخر 7 أيام</button>
+        <button class="btn mustard" id="exportBtn">تصدير Excel</button>
+      </div>
+      <div id="exportMsg"></div>
+    </div>
+    <div class="panel"><h3>ملخص الفروع</h3><div class="scroll"><table id="branchTable"></table></div></div>
+    <div class="panel">
+      <h3>الرواتب</h3>
+      <p class="muted small" id="payNote"></p>
+      <div class="sums" id="paySums"></div>
+      <div class="scroll"><table id="payTable"></table></div>
+    </div>
+    <div class="panel">
+      <h3>ملخص الموظفين</h3>
+      <div class="sums" id="sums"></div>
+      <div class="scroll"><table id="empTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ================= Manager: settings ================= -->
+  <section id="tab-settings" class="hidden">
+    <div class="panel">
+      <h2>عام</h2>
+      <div class="row">
+        <div><label for="sGrace">سماحية التأخير (دقائق)</label><input type="number" id="sGrace" min="0"></div>
+        <div><label for="sLead">يفتح التسجيل قبل الدوام بـ (دقائق)</label><input type="number" id="sLead" min="0" max="240"></div>
+      </div>
+      <div class="checks" style="margin-top:12px"><label><input type="checkbox" id="sApprove">تسجيل الموظف الجديد يحتاج موافقتي قبل الاستخدام</label></div>
+    </div>
+    <div class="panel">
+      <h2>طريقة حساب الراتب</h2>
+      <p class="muted small">قيمة اليوم = الراتب الشهري ÷ 30. الأيام الزيادة تُحسب في تقرير شهر كامل فقط.</p>
+      <div><label for="sMode">طريقة الحساب</label>
+        <select id="sMode">
+          <option value="deduct">راتب كامل عند إكمال أيام الدوام ويُخصم النقص</option>
+          <option value="present">يُدفع عن كل يوم حضور</option>
+        </select></div>
+      <div class="row3" style="margin-top:10px">
+        <div class="bonusF"><label for="sBonusAt">مكافأة عند حضور (يوم)</label><input type="number" id="sBonusAt" min="1"></div>
+        <div class="bonusF"><label for="sBonusDays">قيمة المكافأة (أيام)</label><input type="number" id="sBonusDays" min="0"></div>
+        <div id="restWrap"><label for="sWork">أيام الدوام للراتب الكامل</label><input type="number" id="sWork" min="1" max="31"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>الفروع ومواقعها</h2>
+      <p class="muted small">قف داخل الفرع واضغط «استخدم موقعي الآن» لتثبيت موقعه. لفرع الترك حدّث الموقع كلما تغيّر مكانه.</p>
+      <div id="branchEdit"></div>
+      <div class="actions"><button class="btn alt" id="addBranch">إضافة فرع</button></div>
+    </div>
+    <div class="panel">
+      <h2>الموظفون</h2>
+      <div id="newEmps"></div>
+      <div id="empEdit"></div>
+    </div>
+    <div class="actions"><button class="btn mustard" id="saveCfg">حفظ الإعدادات</button></div>
+    <div id="saveMsg"></div>
+  </section>
+
+  <p class="foot">Same Passion Better Bites<br><span class="small">Designed &amp; developed by DEIAB</span></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
