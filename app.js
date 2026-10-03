@@ -4,10 +4,12 @@
 
 /* ======================= basics ======================= */
 const TZ = 'Asia/Dubai', OFF = '+04:00';
-const DAYS = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-const tFmt = new Intl.DateTimeFormat('ar-AE-u-nu-latn', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
-const dFmt = new Intl.DateTimeFormat('ar-AE-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
-const nFmt = new Intl.DateTimeFormat('ar-AE-u-nu-latn', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: TZ });
+const EN = window.RQ_LANG === 'en', LOC = EN ? 'en-GB' : 'ar-AE-u-nu-latn';
+const TR = window.RQ_T || (s => s);
+const DAYS = EN ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] : ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+const tFmt = new Intl.DateTimeFormat(EN ? 'en-US' : LOC, { hour: 'numeric', minute: '2-digit', timeZone: TZ });
+const dFmt = new Intl.DateTimeFormat(LOC, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
+const nFmt = new Intl.DateTimeFormat(LOC, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: TZ });
 const kFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const pad = n => String(n).padStart(2, '0');
@@ -75,7 +77,7 @@ const mapEmp = r => ({ id: r.id, name: r.name, email: r.email, role: r.role, sta
 const mapRec = r => ({ id: r.id, empId: r.employee_id, branchId: r.branch_id, day: r.day,
   inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null,
   ss: r.shift_start ? Date.parse(r.shift_start) : null, se: r.shift_end ? Date.parse(r.shift_end) : null,
-  inDist: r.in_dist, outDist: r.out_dist });
+  inDist: r.in_dist, outDist: r.out_dist, manual: !!r.manual });
 function putSched(r) {
   (sched[r.day] = sched[r.day] || { o: {} }).o[r.employee_id] = r.is_off ? { off: true } : { start: hm5(r.start_time), end: hm5(r.end_time) };
 }
@@ -386,7 +388,7 @@ async function renderMine() {
   const bn = id => branchById(id)?.name || '';
   $('#mineTable').innerHTML = `<thead><tr><th>التاريخ</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>الحالة</th><th>الساعات</th></tr></thead><tbody>` +
     (mine.length ? mine.map(x => { const st = x.state === 'غائب' ? '<span class="tag abs">غائب</span>' : x.state === 'متأخر' ? `<span class="tag late">متأخر ${x.lm} د</span>` : '<span class="tag in">حاضر</span>';
-      return `<tr><td>${DAYS[dow(x.d)]} ${x.d.slice(5)}</td><td>${esc(x.rec ? bn(x.rec.branchId) : '—')}</td><td class="num">${x.rec ? fmtT(x.rec.inAt) : '—'}</td><td class="num">${x.rec ? fmtT(x.rec.outAt) : '—'}</td><td>${st}</td><td class="num">${x.w ? h2(x.w) : '—'}</td></tr>`; }).join('')
+      return `<tr><td>${DAYS[dow(x.d)]} ${x.d.slice(5)}</td><td>${esc(x.rec ? bn(x.rec.branchId) : '—')}</td><td class="num">${x.rec ? fmtT(x.rec.inAt) : '—'}</td><td class="num">${x.rec ? fmtT(x.rec.outAt) : '—'}</td><td>${st}${x.rec && x.rec.manual ? ' <span class="tag">يدوي</span>' : ''}</td><td class="num">${x.w ? h2(x.w) : '—'}</td></tr>`; }).join('')
       : '<tr><td colspan="6" class="muted">لا توجد أيام مسجلة في هذا الشهر.</td></tr>') + '</tbody>';
   renderBadges();
 }
@@ -473,6 +475,61 @@ $('#scCopy').onclick = async () => { const next = addDays(scDay, 1);
   try { await scWrite(scDay, scDraft); await scWrite(next, JSON.parse(JSON.stringify(scDraft))); scLoad(next); msg($('#scMsg'), 'ok', 'تم النسخ إلى ' + next + '. عدّل ما تريد واحفظ.'); }
   catch (e) { msg($('#scMsg'), 'err', 'لم يتم النسخ. حاول مرة أخرى.'); } };
 
+/* ======================= manager: manual records ======================= */
+const hmFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+let mrSig = '';
+function renderManual() {
+  if (!isMgr()) return;
+  const list = staff(), sig = list.map(e => e.id).join() + '|' + cfg.branches.map(b => b.id).join();
+  if (sig !== mrSig) {
+    mrSig = sig; const ce = $('#mrEmp').value, cb = $('#mrBranch').value;
+    $('#mrEmp').innerHTML = list.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+    $('#mrBranch').innerHTML = cfg.branches.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+    if (ce && list.some(e => e.id === ce)) $('#mrEmp').value = ce;
+    if (cb && branchById(cb)) $('#mrBranch').value = cb;
+    if (!$('#mrDay').value) $('#mrDay').value = addDays(dayKey(new Date()), -1);
+    $('#mrDay').max = dayKey(new Date());
+    mrFill();
+  }
+}
+async function mrFill() {
+  const id = $('#mrEmp').value, day = $('#mrDay').value; if (!id || !day) { $('#mrState').textContent = ''; return; }
+  if (loadedFrom && day < loadedFrom) { try { await ensureFrom(day); } catch (e) {} }
+  const r = att[id + '_' + day], e = empById(id);
+  if (r) {
+    $('#mrBranch').value = r.branchId || $('#mrBranch').value;
+    $('#mrIn').value = hmFmt.format(new Date(r.inAt)); $('#mrOut').value = r.outAt ? hmFmt.format(new Date(r.outAt)) : '';
+    $('#mrState').textContent = r.manual ? 'يوجد سجل يدوي لهذا اليوم. يمكنك تعديله أو حذفه.' : 'يوجد سجل لهذا اليوم سجّله الموظف. يمكنك تعديله أو حذفه.';
+  } else {
+    const b = branchById($('#mrBranch').value) || branchById(empBranches(e || {})[0]) || cfg.branches[0];
+    if (b) { $('#mrBranch').value = b.id; const s = branchShift(b); $('#mrIn').value = s.start; $('#mrOut').value = s.end; }
+    $('#mrState').textContent = 'لا يوجد سجل لهذا اليوم.';
+  }
+  show('#mrDel', !!r);
+}
+['#mrEmp', '#mrDay'].forEach(s => $(s).onchange = mrFill);
+$('#mrBranch').onchange = () => { const id = $('#mrEmp').value, day = $('#mrDay').value; if (!att[id + '_' + day]) { const s = branchShift(branchById($('#mrBranch').value)); $('#mrIn').value = s.start; $('#mrOut').value = s.end; } };
+const MR_ERR = { future: 'لا يمكن تسجيل حضور ليوم قادم.', no_branch: 'اختر الفرع.', no_in: 'حدد وقت الحضور.', no_employee: 'اختر الموظف.' };
+$('#mrSave').onclick = async () => {
+  const out = $('#mrMsg'), id = $('#mrEmp').value, day = $('#mrDay').value;
+  if (!id || !day) return msg(out, 'err', 'اختر الموظف واليوم.');
+  if (!$('#mrIn').value) return msg(out, 'err', MR_ERR.no_in);
+  $('#mrSave').disabled = true;
+  try {
+    const r = await call('att_mgr_record', { p_emp: id, p_day: day, p_branch: $('#mrBranch').value, p_in: $('#mrIn').value, p_out: $('#mrOut').value, p_delete: false });
+    if (!r.ok) msg(out, 'err', MR_ERR[r.error] || 'لم يتم الحفظ.');
+    else { await reloadRecent(); await ensureFrom(day); mrFill(); msg(out, 'ok', 'تم حفظ الحضور، ووصل للموظف تنبيه.'); }
+  } catch (e) { msg(out, 'err', 'لم يتم الحفظ. حاول مرة أخرى.'); }
+  $('#mrSave').disabled = false;
+};
+$('#mrDel').onclick = async () => {
+  const out = $('#mrMsg'), id = $('#mrEmp').value, day = $('#mrDay').value;
+  if (!confirm('حذف سجل حضور هذا اليوم؟')) return;
+  try { await call('att_mgr_record', { p_emp: id, p_day: day, p_branch: null, p_in: null, p_out: null, p_delete: true });
+    delete att[id + '_' + day]; await reloadRecent(); await ensureFrom(day); mrFill(); msg(out, 'ok', 'تم حذف السجل.'); }
+  catch (e) { msg(out, 'err', 'لم يتم الحذف. حاول مرة أخرى.'); }
+};
+
 /* ======================= manager: reports ======================= */
 const bnames = e => empBranches(e).map(id => branchById(id)?.name).filter(Boolean).join('، ');
 function setRange(kind) {
@@ -516,11 +573,12 @@ $('#exportBtn').onclick = async () => {
   const pr = rows.map(r => { const o = { 'الموظف': r.e.name, 'البريد': r.e.email || '', 'الفروع': bnames(r.e), 'الراتب الشهري': r.salary, 'قيمة اليوم': +r.daily.toFixed(2), 'أيام الحضور': r.present };
     if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['صافي المستحق'] = +r.net.toFixed(2); return o; });
   const sum = rows.map(r => ({ 'الموظف': r.e.name, 'الفروع': bnames(r.e), 'أيام الحضور': r.present, 'أيام الغياب': r.absent, 'مرات التأخير': r.lateN, 'دقائق التأخير': r.lateMin, 'ساعات العمل': +h2(r.hours), 'ساعات إضافية': +h2(r.ot), 'أيام بدون انصراف': r.noOut }));
-  const det = log.sort((a, b) => a.d < b.d ? -1 : 1).map(x => ({ 'التاريخ': x.d, 'اليوم': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
-  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pr), 'الرواتب');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sum), 'الملخص');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), 'السجل اليومي');
+  const det = log.sort((a, b) => a.d < b.d ? -1 : 1).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
+  const tk = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
+  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: !EN }] };
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pr)), TR('الرواتب'));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(sum)), TR('الملخص'));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(det)), TR('السجل اليومي'));
   XLSX.writeFile(wb, `RQ-attendance_${from}_${to}.xlsx`);
   msg(out, 'ok', 'تم تصدير الملف.');
 };
@@ -641,7 +699,7 @@ function renderAll() {
   if (isEmp() && curTab === 'mine') renderMine();
   if (isMgr()) {
     if (curTab === 'today') renderToday();
-    if (curTab === 'sched') renderSched();
+    if (curTab === 'sched') { renderSched(); renderManual(); }
     if (curTab === 'reports') renderReports();
     if (curTab === 'settings') renderSettings();
   }
@@ -661,5 +719,6 @@ if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent) && !dismissed()
 }
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 
+setNet(navigator.onLine ? 'on' : 'off');
 if (token) afterAuth(); else onlyBox('#loginBox');
 })();

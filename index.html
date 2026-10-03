@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Rubik:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="i18n.js"></script>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="app.css">
 </head>
@@ -26,6 +27,8 @@
       <div class="mark logo-bg" role="img" aria-label="RQ Kitchen"></div>
       <div class="bt"><span>الحضور والانصراف</span></div>
       <span class="net" id="netState">جاري الاتصال…</span>
+      <button class="hbtn" id="langBtn" type="button">EN</button>
+      <button class="hbtn" id="themeBtn" type="button" aria-label="الوضع الليلي"></button>
       <button class="btn small mustard hidden" id="signOutTop">خروج</button>
     </div>
     <div class="clock">
@@ -159,7 +162,7 @@
       <h2>جدول الدوام</h2>
       <p class="muted small">غيّر موعد أي موظف ليوم محدد أو اجعله إجازة. بدون تغيير يُطبَّق موعد الفرع الذي يسجل فيه.</p>
       <div class="row">
-        <div><label for="scDay">اليوم</label><input type="date" id="scDay"></div>
+        <div><label for="scDay">التاريخ</label><input type="date" id="scDay"></div>
         <div style="display:flex;gap:8px;align-items:flex-end"><button class="btn alt" id="scPrev">اليوم السابق</button><button class="btn alt" id="scNext">اليوم التالي</button></div>
       </div>
       <div class="row" style="margin-top:12px">
@@ -175,6 +178,22 @@
     <div class="panel"><div id="scList"></div>
       <div class="actions"><button class="btn mustard" id="scSave">حفظ جدول اليوم</button><button class="btn alt" id="scCopy">نسخ إلى اليوم التالي</button></div>
       <div id="scMsg"></div>
+    </div>
+    <div class="panel">
+      <h2>تسجيل حضور يدوي</h2>
+      <p class="muted small">للأيام السابقة، أو لتصحيح يوم نسي فيه الموظف التسجيل. يصل للموظف تنبيه بأي تعديل.</p>
+      <div class="row">
+        <div><label for="mrEmp">الموظف</label><select id="mrEmp"></select></div>
+        <div><label for="mrDay">التاريخ</label><input type="date" id="mrDay"></div>
+      </div>
+      <div class="row3" style="margin-top:10px">
+        <div><label for="mrBranch">الفرع</label><select id="mrBranch"></select></div>
+        <div><label for="mrIn">وقت الحضور</label><input type="time" id="mrIn"></div>
+        <div><label for="mrOut">وقت الانصراف</label><input type="time" id="mrOut"></div>
+      </div>
+      <p class="small muted" id="mrState" style="margin:10px 0 0"></p>
+      <div class="actions"><button class="btn mustard" id="mrSave">حفظ الحضور</button><button class="btn danger" id="mrDel">حذف السجل</button></div>
+      <div id="mrMsg"></div>
     </div>
   </section>
 
