@@ -100,7 +100,12 @@
     'يوجد سجل يدوي لهذا اليوم. يمكنك تعديله أو حذفه.': 'A manual record exists for this day. You can edit or delete it.', 'يوجد سجل لهذا اليوم سجّله الموظف. يمكنك تعديله أو حذفه.': 'The employee clocked this day. You can edit or delete it.',
     'لا يوجد سجل لهذا اليوم.': 'No record for this day.', 'لا يمكن تسجيل حضور ليوم قادم.': 'Can’t record a future day.', 'حدد وقت الحضور.': 'Set the clock-in time.', 'اختر الموظف.': 'Choose the employee.',
     'اختر الموظف واليوم.': 'Choose the employee and day.', 'تم حفظ الحضور، ووصل للموظف تنبيه.': 'Attendance saved; the employee was notified.', 'حذف سجل حضور هذا اليوم؟': 'Delete this day’s attendance record?',
-    'تم حذف السجل.': 'Record deleted.', 'لم يتم الحذف. حاول مرة أخرى.': 'Not deleted. Try again.'
+    'تم حذف السجل.': 'Record deleted.', 'تحديد على الخريطة': 'Pick on map', 'تحديد موقع الفرع': 'Set branch location', 'ابحث عن مكان أو الصق رابط خرائط Google': 'Search a place or paste a Google Maps link',
+    'بحث': 'Search', 'خريطة': 'Map', 'قمر صناعي': 'Satellite', 'اضغط على الخريطة أو اسحب الدبوس إلى باب الفرع بالضبط. الدائرة توضح نطاق التسجيل.': 'Tap the map or drag the pin to the exact branch door. The circle shows the clock-in radius.',
+    'موقعي الآن': 'My location', 'اعتماد الموقع': 'Use this location', 'الخريطة لم تُحمّل بعد. تحقق من الإنترنت وحاول مرة أخرى.': 'The map hasn’t loaded yet. Check your internet and try again.',
+    'هذا الرابط لا يحتوي على إحداثيات. افتح الموقع في خرائط Google، ثم انسخ الرابط من شريط المتصفح، أو ابحث بالاسم.': 'This link has no coordinates. Open the place in Google Maps and copy the link from the browser bar, or search by name.',
+    'جاري البحث…': 'Searching…', 'لا توجد نتائج. جرّب اسماً آخر، أو حرّك الخريطة واضغط على المكان.': 'No results. Try another name, or move the map and tap the spot.',
+    'تعذّر البحث. تحقق من الإنترنت وحاول مرة أخرى.': 'Search failed. Check your internet and try again.', 'اختر المكان على الخريطة أولاً.': 'Pick a spot on the map first.', 'لم يتم الحذف. حاول مرة أخرى.': 'Not deleted. Try again.'
   };
   const P = [
     [/^تم تسجيل حضورك في (.+) الساعة (.+) \(متأخر (\d+) دقيقة\)\.$/, m => `Clocked in at ${m[1]}, ${m[2]} (${m[3]} min late).`],
@@ -132,6 +137,8 @@
     [/^حذف فرع (.+)؟ سجلات الحضور السابقة تبقى محفوظة\.$/, m => `Delete branch ${m[1]}? Past attendance records are kept.`],
     [/^رقم سري جديد لـ (.+) \(4 إلى 6 أرقام\):$/, m => `New PIN for ${m[1] === 'الموظف' ? 'the employee' : m[1]} (4–6 digits):`],
     [/^الموقع: (.+)$/, m => `Location: ${m[1]}`],
+    [/^تحديد موقع (.+)$/, m => `Set location: ${m[1]}`],
+    [/^تم تحديد موقع (.+) على الخريطة\. اضغط «حفظ الإعدادات»\.$/, m => `${m[1]} location set on the map. Tap “Save settings”.`],
     [/^(.+) \(بدون انصراف\)$/, m => `${T(m[1])} (no clock-out)`],
     [/^تم تغيير موعد دوامك يوم (\S+) إلى (.+)\.$/, m => `Your hours on ${m[1]} changed to ${m[2]}.`],
     [/^تم تحديد يوم (\S+) إجازة لك\.$/, m => `${m[1]} was set as your day off.`],

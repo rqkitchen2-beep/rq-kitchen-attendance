@@ -611,11 +611,12 @@ function renderSettings() {
     <div class="row" style="margin-top:10px"><div><label>بداية الدوام</label><input type="time" data-b="${i}" data-k="start" value="${esc(branchShift(b).start)}"></div>
     <div><label>نهاية الدوام</label><input type="time" data-b="${i}" data-k="end" value="${esc(branchShift(b).end)}"></div></div>
     <p class="small ${b.lat == null ? '' : 'muted'}" style="margin:10px 0 0;${b.lat == null ? 'color:var(--out)' : ''}">${b.lat == null ? 'الموقع غير محدد' : `الموقع: ${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}`}</p>
-    <div class="actions"><button class="btn alt" data-here="${i}">استخدم موقعي الآن</button><button class="btn danger" data-delb="${i}">حذف الفرع</button></div></div>`).join('');
+    <div class="actions"><button class="btn mustard" data-map="${i}">تحديد على الخريطة</button><button class="btn alt" data-here="${i}">استخدم موقعي الآن</button><button class="btn danger" data-delb="${i}">حذف الفرع</button></div></div>`).join('');
   $$('[data-b]').forEach(el => el.oninput = () => { const k = el.dataset.k, v = el.value; draft.branches[el.dataset.b][k] = ['name', 'start', 'end'].includes(k) ? v : (v === '' ? null : Number(v)); });
   $$('[data-delb]').forEach(el => el.onclick = () => { const b = draft.branches[+el.dataset.delb];
     if (!confirm(`حذف فرع ${b.name}؟ سجلات الحضور السابقة تبقى محفوظة.`)) return;
     draft.branches.splice(+el.dataset.delb, 1); draft.employees.forEach(e => e.branchIds = e.branchIds.filter(x => x !== b.id)); renderSettings(); });
+  $$('[data-map]').forEach(el => el.onclick = () => openMap(+el.dataset.map));
   $$('[data-here]').forEach(el => el.onclick = async () => {
     el.disabled = true; el.textContent = 'جاري التحديد…';
     try { const p = await getPos(); const b = draft.branches[+el.dataset.here]; b.lat = +p.coords.latitude.toFixed(6); b.lng = +p.coords.longitude.toFixed(6); renderSettings();
@@ -689,6 +690,78 @@ $('#saveCfg').onclick = async () => {
     msg(out, 'ok', 'تم حفظ الإعدادات، ووصلت التنبيهات للموظفين المعنيين.');
   } catch (e) { msg(out, 'err', 'لم يتم حفظ كل التغييرات. تحقق من الاتصال وحاول مرة أخرى.'); }
   btn.disabled = false;
+};
+
+/* ======================= map picker ======================= */
+let map = null, mapPin = null, mapCircle = null, mapIdx = -1, mapLayers = null, mapPos = null;
+function setPin(lat, lng, zoom) {
+  mapPos = { lat: +lat, lng: +lng };
+  const ll = [mapPos.lat, mapPos.lng], b = draft.branches[mapIdx];
+  if (!mapPin) {
+    mapPin = L.marker(ll, { draggable: true }).addTo(map);
+    mapPin.on('drag', e => { const p = e.target.getLatLng(); mapPos = { lat: p.lat, lng: p.lng }; mapCircle.setLatLng(p); showCoords(); });
+    mapCircle = L.circle(ll, { radius: Number(b.radius) || 10, color: '#F18E25', weight: 2, fillOpacity: .18 }).addTo(map);
+  } else { mapPin.setLatLng(ll); mapCircle.setLatLng(ll); }
+  mapCircle.setRadius(Number(b.radius) || 10);
+  if (zoom) map.setView(ll, zoom);
+  showCoords();
+}
+function showCoords() { $('#mapCoords').textContent = mapPos ? `${mapPos.lat.toFixed(6)}, ${mapPos.lng.toFixed(6)}` : ''; }
+function openMap(i) {
+  if (typeof L === 'undefined') return msg($('#saveMsg'), 'err', 'الخريطة لم تُحمّل بعد. تحقق من الإنترنت وحاول مرة أخرى.');
+  mapIdx = i; const b = draft.branches[i];
+  $('#mapTitle').textContent = 'تحديد موقع ' + b.name;
+  show('#mapModal', true); document.body.classList.add('noscroll');
+  $('#mapResults').innerHTML = ''; show('#mapResults', false); $('#mapQ').value = '';
+  if (!map) {
+    map = L.map('mapBox', { zoomControl: true, attributionControl: true });
+    mapLayers = {
+      street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }),
+      sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri' })
+    };
+    mapLayers.street.addTo(map);
+    map.on('click', e => setPin(e.latlng.lat, e.latlng.lng));
+    $$('.mapLayers button').forEach(btn => btn.onclick = () => {
+      $$('.mapLayers button').forEach(x => x.classList.toggle('on', x === btn));
+      Object.values(mapLayers).forEach(l => map.removeLayer(l)); mapLayers[btn.dataset.layer].addTo(map);
+    });
+  }
+  if (mapPin) { map.removeLayer(mapPin); map.removeLayer(mapCircle); mapPin = null; mapCircle = null; }
+  mapPos = null; showCoords();
+  setTimeout(() => {
+    map.invalidateSize();
+    if (b.lat != null && b.lng != null) setPin(b.lat, b.lng, 18);
+    else map.setView([24.45, 54.6], 10);
+  }, 60);
+}
+function closeMap() { show('#mapModal', false); document.body.classList.remove('noscroll'); }
+$('#mapClose').onclick = closeMap;
+$('#mapModal').onclick = e => { if (e.target.id === 'mapModal') closeMap(); };
+async function mapSearch() {
+  const q = $('#mapQ').value.trim(), out = $('#mapResults'); if (!q) return;
+  const m = q.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || q.match(/[?&](?:q|query|ll)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/) || q.match(/^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/) || q.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (m) { setPin(m[1], m[2], 18); show('#mapResults', false); return; }
+  if (/^https?:\/\//.test(q)) { out.innerHTML = `<li>${esc('هذا الرابط لا يحتوي على إحداثيات. افتح الموقع في خرائط Google، ثم انسخ الرابط من شريط المتصفح، أو ابحث بالاسم.')}</li>`; show('#mapResults', true); return; }
+  out.innerHTML = `<li>${esc('جاري البحث…')}</li>`; show('#mapResults', true);
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=ae&accept-language=' + (EN ? 'en' : 'ar,en') + '&q=' + encodeURIComponent(q));
+    const list = await r.json();
+    if (!list.length) { out.innerHTML = `<li>${esc('لا توجد نتائج. جرّب اسماً آخر، أو حرّك الخريطة واضغط على المكان.')}</li>`; return; }
+    out.innerHTML = list.map((x, k) => `<li data-k="${k}">${esc(x.display_name)}</li>`).join('');
+    $$('#mapResults li[data-k]').forEach(li => li.onclick = () => { const x = list[+li.dataset.k]; setPin(x.lat, x.lon, 18); show('#mapResults', false); });
+  } catch (e) { out.innerHTML = `<li>${esc('تعذّر البحث. تحقق من الإنترنت وحاول مرة أخرى.')}</li>`; }
+}
+$('#mapGo').onclick = mapSearch;
+$('#mapQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); mapSearch(); } };
+$('#mapMe').onclick = async () => {
+  $('#mapMe').disabled = true;
+  try { const p = await getPos(); setPin(p.coords.latitude, p.coords.longitude, 19); } catch (e) { $('#mapHint').textContent = 'تعذّر تحديد موقعك. فعّل صلاحية الموقع وحاول مرة أخرى.'; }
+  $('#mapMe').disabled = false;
+};
+$('#mapSave').onclick = () => {
+  if (!mapPos) { $('#mapHint').textContent = 'اختر المكان على الخريطة أولاً.'; return; }
+  const b = draft.branches[mapIdx]; b.lat = +mapPos.lat.toFixed(6); b.lng = +mapPos.lng.toFixed(6);
+  closeMap(); renderSettings(); msg($('#saveMsg'), 'info', `تم تحديد موقع ${b.name} على الخريطة. اضغط «حفظ الإعدادات».`);
 };
 
 /* ======================= render all ======================= */

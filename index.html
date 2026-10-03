@@ -19,6 +19,7 @@
 <script src="i18n.js"></script>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
 <header class="hero">
@@ -267,11 +268,34 @@
     <div id="saveMsg"></div>
   </section>
 
+  <div class="mapModal hidden" id="mapModal" role="dialog" aria-modal="true">
+    <div class="mapCard">
+      <div class="mapHead">
+        <b id="mapTitle">تحديد موقع الفرع</b>
+        <button class="btn small alt" id="mapClose" type="button">إغلاق</button>
+      </div>
+      <div class="mapSearch">
+        <input id="mapQ" type="search" placeholder="ابحث عن مكان أو الصق رابط خرائط Google">
+        <button class="btn small" id="mapGo" type="button">بحث</button>
+      </div>
+      <ul class="mapResults hidden" id="mapResults"></ul>
+      <div class="mapWrap"><div id="mapBox"></div>
+        <div class="mapLayers"><button type="button" class="on" data-layer="street">خريطة</button><button type="button" data-layer="sat">قمر صناعي</button></div>
+      </div>
+      <p class="small muted mapHint" id="mapHint">اضغط على الخريطة أو اسحب الدبوس إلى باب الفرع بالضبط. الدائرة توضح نطاق التسجيل.</p>
+      <div class="mapFoot">
+        <span class="small muted" id="mapCoords" dir="ltr"></span>
+        <div style="display:flex;gap:8px"><button class="btn small alt" id="mapMe" type="button">موقعي الآن</button><button class="btn small mustard" id="mapSave" type="button">اعتماد الموقع</button></div>
+      </div>
+    </div>
+  </div>
+
   <p class="foot">Same Passion Better Bites<br><span class="small">Designed &amp; developed by DEIAB</span></p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>

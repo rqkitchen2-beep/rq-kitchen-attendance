@@ -11,4 +11,26 @@ body.standalone .install{display:none!important}
 .bar{flex-wrap:nowrap}
 @media (max-width:400px){.bt span{display:none}}
 [dir="ltr"] .clock .time .dp{margin-inline-start:.2em}
+.mapModal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;
+  padding:env(safe-area-inset-top,0px) 0 0}
+.mapCard{background:var(--surface);width:100%;max-width:720px;height:min(92vh,760px);border-radius:22px 22px 0 0;display:flex;flex-direction:column;
+  padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));gap:10px}
+@media (min-width:760px){.mapModal{align-items:center}.mapCard{border-radius:22px}}
+.mapHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.mapHead b{font-family:"Rubik",sans-serif;font-size:17px}
+.mapSearch{display:flex;gap:8px}
+.mapSearch input{flex:1}
+.mapResults{list-style:none;margin:0;padding:0;max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.mapResults li{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+.mapResults li:last-child{border-bottom:0}
+.mapResults li:hover{background:var(--chip)}
+.mapWrap{position:relative;flex:1;min-height:240px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+#mapBox{position:absolute;inset:0}
+.mapLayers{position:absolute;top:10px;inset-inline-start:10px;z-index:500;display:flex;background:var(--surface);border-radius:10px;border:1px solid var(--line);overflow:hidden}
+.mapLayers button{border:0;background:transparent;padding:7px 11px;font-size:13px;cursor:pointer;color:var(--ink)}
+.mapLayers button.on{background:var(--roast);color:var(--on-roast)}
+.mapHint{margin:0}
+.mapFoot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.leaflet-container{font-family:inherit}
+body.noscroll{overflow:hidden}
 .rowline{display:flex;justify-content:space-between;gap:10px;align-items:center}
