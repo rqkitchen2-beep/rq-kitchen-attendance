@@ -743,13 +743,28 @@ async function mapSearch() {
   if (m) { setPin(m[1], m[2], 18); show('#mapResults', false); return; }
   if (/^https?:\/\//.test(q)) { out.innerHTML = `<li>${esc('هذا الرابط لا يحتوي على إحداثيات. افتح الموقع في خرائط Google، ثم انسخ الرابط من شريط المتصفح، أو ابحث بالاسم.')}</li>`; show('#mapResults', true); return; }
   out.innerHTML = `<li>${esc('جاري البحث…')}</li>`; show('#mapResults', true);
+  let list = [];
+  const c = map ? map.getCenter() : { lat: 24.45, lng: 54.6 };
+  // 1) Photon (OpenStreetMap, good at shops / malls / partial names), biased to the visible area
   try {
-    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=ae&accept-language=' + (EN ? 'en' : 'ar,en') + '&q=' + encodeURIComponent(q));
-    const list = await r.json();
-    if (!list.length) { out.innerHTML = `<li>${esc('لا توجد نتائج. جرّب اسماً آخر، أو حرّك الخريطة واضغط على المكان.')}</li>`; return; }
-    out.innerHTML = list.map((x, k) => `<li data-k="${k}">${esc(x.display_name)}</li>`).join('');
-    $$('#mapResults li[data-k]').forEach(li => li.onclick = () => { const x = list[+li.dataset.k]; setPin(x.lat, x.lon, 18); show('#mapResults', false); });
-  } catch (e) { out.innerHTML = `<li>${esc('تعذّر البحث. تحقق من الإنترنت وحاول مرة أخرى.')}</li>`; }
+    const r = await fetch(`https://photon.komoot.io/api/?limit=10&lat=${c.lat}&lon=${c.lng}&q=${encodeURIComponent(q)}` + (EN ? '&lang=en' : ''));
+    const j = await r.json();
+    list = (j.features || []).map(f => { const p = f.properties || {};
+      const parts = [p.name, p.street && (p.housenumber ? p.street + ' ' + p.housenumber : p.street), p.district || p.locality, p.city || p.county, p.state].filter(Boolean);
+      return { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], label: [...new Set(parts)].join('، ') || q, ae: p.countrycode === 'AE' }; })
+      .sort((x, y) => (y.ae ? 1 : 0) - (x.ae ? 1 : 0));
+    if (list.some(x => x.ae)) list = list.filter(x => x.ae);
+  } catch (e) {}
+  // 2) Nominatim as a fallback
+  if (!list.length) {
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=8&countrycodes=ae&accept-language=' + (EN ? 'en' : 'ar,en') + '&q=' + encodeURIComponent(q));
+      list = (await r.json()).map(x => ({ lat: +x.lat, lng: +x.lon, label: x.display_name }));
+    } catch (e) {}
+  }
+  if (!list.length) { out.innerHTML = `<li>${esc('لا توجد نتائج. جرّب اسم المنطقة (مثل مدينة محمد بن زايد)، ثم قرّب الخريطة واضغط على مكان الفرع، أو الصق الإحداثيات من خرائط Google.')}</li>`; return; }
+  out.innerHTML = list.slice(0, 8).map((x, k) => `<li data-k="${k}">${esc(x.label)}</li>`).join('');
+  $$('#mapResults li[data-k]').forEach(li => li.onclick = () => { const x = list[+li.dataset.k]; setPin(x.lat, x.lng, 18); show('#mapResults', false); });
 }
 $('#mapGo').onclick = mapSearch;
 $('#mapQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); mapSearch(); } };

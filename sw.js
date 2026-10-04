@@ -1,5 +1,5 @@
 // RQ Attendance service worker: app shell offline, always fresh when online.
-const CACHE = 'rq-att-v3';
+const CACHE = 'rq-att-v4';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.css', 'app.js', 'i18n.js', 'config.js', 'manifest.webmanifest',
   'logo-dark.webp', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });

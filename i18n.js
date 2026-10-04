@@ -105,7 +105,8 @@
     'موقعي الآن': 'My location', 'اعتماد الموقع': 'Use this location', 'الخريطة لم تُحمّل بعد. تحقق من الإنترنت وحاول مرة أخرى.': 'The map hasn’t loaded yet. Check your internet and try again.',
     'هذا الرابط لا يحتوي على إحداثيات. افتح الموقع في خرائط Google، ثم انسخ الرابط من شريط المتصفح، أو ابحث بالاسم.': 'This link has no coordinates. Open the place in Google Maps and copy the link from the browser bar, or search by name.',
     'جاري البحث…': 'Searching…', 'لا توجد نتائج. جرّب اسماً آخر، أو حرّك الخريطة واضغط على المكان.': 'No results. Try another name, or move the map and tap the spot.',
-    'تعذّر البحث. تحقق من الإنترنت وحاول مرة أخرى.': 'Search failed. Check your internet and try again.', 'اختر المكان على الخريطة أولاً.': 'Pick a spot on the map first.', 'لم يتم الحذف. حاول مرة أخرى.': 'Not deleted. Try again.'
+    'تعذّر البحث. تحقق من الإنترنت وحاول مرة أخرى.': 'Search failed. Check your internet and try again.',
+    'لا توجد نتائج. جرّب اسم المنطقة (مثل مدينة محمد بن زايد)، ثم قرّب الخريطة واضغط على مكان الفرع، أو الصق الإحداثيات من خرائط Google.': 'No results. Try the area name (e.g. Mohammed Bin Zayed City), then zoom in and tap the branch spot, or paste coordinates from Google Maps.', 'اختر المكان على الخريطة أولاً.': 'Pick a spot on the map first.', 'لم يتم الحذف. حاول مرة أخرى.': 'Not deleted. Try again.'
   };
   const P = [
     [/^تم تسجيل حضورك في (.+) الساعة (.+) \(متأخر (\d+) دقيقة\)\.$/, m => `Clocked in at ${m[1]}, ${m[2]} (${m[3]} min late).`],
