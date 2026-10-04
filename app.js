@@ -50,7 +50,8 @@ async function call(fn, args = {}) {
 let me = null;              // me = own att_employees row (mapped)
 let cfg = { branches: [], employees: [], grace: 10, openLead: 30, payMode: 'deduct', workDays: 26, bonusAt: 30, bonusDays: 4, requireApproval: true };
 let att = {}, sched = {}, pay = {}, notes = [];
-let loadedFrom = null, curTab = 'punch', picked = null, busy = false;
+let loadedFrom = null, curTab = 'punch', picked = null, busy = false, leaves = [], adjs = [];
+let DEVICE = null; try { DEVICE = localStorage.getItem('rq_dev'); if (!DEVICE) { DEVICE = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2)); localStorage.setItem('rq_dev', DEVICE); } } catch (e) { DEVICE = null; }
 const isMgr = () => me && me.role === 'manager' && me.status === 'active';
 const isEmp = () => me && me.role === 'employee' && me.status === 'active';
 const staff = () => cfg.employees.filter(e => e.role === 'employee' && e.status === 'active');
@@ -73,7 +74,7 @@ setInterval(() => { tick(); if (isEmp() && !busy) renderPunch(); }, 15000);
 
 /* ======================= mapping ======================= */
 const mapBranch = r => ({ id: r.id, name: r.name, lat: r.lat, lng: r.lng, radius: r.radius_m, start: hm5(r.start_time), end: hm5(r.end_time), sort: r.sort });
-const mapEmp = r => ({ id: r.id, name: r.name, email: r.email, role: r.role, status: r.status, branchIds: r.branch_ids || [], off: r.weekly_off, createdAt: r.created_at });
+const mapEmp = r => ({ id: r.id, name: r.name, email: r.email, role: r.role, status: r.status, branchIds: r.branch_ids || [], off: r.weekly_off, createdAt: r.created_at, hasDevice: !!r.has_device, devicePending: !!r.device_pending });
 const mapRec = r => ({ id: r.id, empId: r.employee_id, branchId: r.branch_id, day: r.day,
   inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null,
   ss: r.shift_start ? Date.parse(r.shift_start) : null, se: r.shift_end ? Date.parse(r.shift_end) : null,
@@ -88,7 +89,8 @@ function applyData(d, merge) {
   me = mapEmp(d.me);
   const st = d.settings || {};
   Object.assign(cfg, { grace: st.grace_min, openLead: st.open_lead_min, payMode: st.pay_mode, workDays: st.work_days,
-    bonusAt: st.bonus_at, bonusDays: st.bonus_days, requireApproval: st.require_approval });
+    bonusAt: st.bonus_at, bonusDays: st.bonus_days, requireApproval: st.require_approval,
+    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0 });
   cfg.branches = (d.branches || []).map(mapBranch);
   cfg.employees = isMgr() ? (d.employees || []).map(mapEmp) : [me];
   pay = {}; (d.salaries || []).forEach(r => pay[r.employee_id] = Number(r.monthly));
@@ -96,6 +98,7 @@ function applyData(d, merge) {
   (d.records || []).forEach(x => { const m = mapRec(x); att[m.empId + '_' + m.day] = m; });
   (d.schedule || []).forEach(putSched);
   notes = d.notifications || [];
+  leaves = d.leaves || []; adjs = d.adjustments || [];
 }
 async function loadAll() {
   if (!loadedFrom) loadedFrom = monthStart(dayKey(new Date()), 1);
@@ -136,14 +139,14 @@ $('#toReg').onclick = () => onlyBox('#regBox');
 $('#toForgot').onclick = () => onlyBox('#forgotBox');
 $$('[data-back]').forEach(b => b.onclick = () => onlyBox('#loginBox'));
 const pinOk = p => /^\d{4,6}$/.test(p);
-const ACC_ERR = { invalid: 'البريد أو الرقم السري غير صحيح.', disabled: 'تم إيقاف هذا الحساب. راجع المدير.', exists: 'هذا البريد مسجل من قبل. ادخل من شاشة الدخول.',
+const ACC_ERR = { device: 'هذا الحساب مربوط بجوال آخر. أرسلنا طلباً للمدير ليوافق على هذا الجوال، ثم حاول مرة أخرى.', invalid: 'البريد أو الرقم السري غير صحيح.', disabled: 'تم إيقاف هذا الحساب. راجع المدير.', exists: 'هذا البريد مسجل من قبل. ادخل من شاشة الدخول.',
   name: 'اكتب اسمك الكامل.', email: 'اكتب بريداً إلكترونياً صحيحاً.', pin: 'الرقم السري يجب أن يكون من 4 إلى 6 أرقام.', old: 'الرقم السري الحالي غير صحيح.' };
 $('#lgBtn').onclick = async () => {
   const email = $('#lgEmail').value.trim().toLowerCase(), pin = $('#lgPin').value.trim(), out = $('#lgMsg');
   if (!email || !pin) return msg(out, 'err', 'اكتب البريد والرقم السري.');
   $('#lgBtn').disabled = true; msg(out, 'info', 'جاري الدخول…');
   try {
-    const r = await call('att_login', { p_email: email, p_pin: pin });
+    const r = await call('att_login', { p_email: email, p_pin: pin, p_device: DEVICE });
     if (!r.ok) { const t = r.error === 'locked' ? `محاولات كثيرة. حاول بعد الساعة ${fmtT(Date.parse(r.until))}.` : (ACC_ERR[r.error] || 'تعذّر الدخول.'); msg(out, 'err', t); }
     else { saveToken(r.token); $('#lgPin').value = ''; msg(out, '', ''); await afterAuth(); }
   } catch (e) { msg(out, 'err', 'تعذّر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.'); }
@@ -158,7 +161,7 @@ $('#rgBtn').onclick = async () => {
   if (pin !== $('#rgPin2').value.trim()) return msg(out, 'err', 'الرقمان السريان غير متطابقين.');
   $('#rgBtn').disabled = true; msg(out, 'info', 'جاري إنشاء حسابك…');
   try {
-    const r = await call('att_register', { p_name: name, p_email: email, p_pin: pin });
+    const r = await call('att_register', { p_name: name, p_email: email, p_pin: pin, p_device: DEVICE });
     if (!r.ok) msg(out, 'err', ACC_ERR[r.error] || 'تعذّر إنشاء الحساب.');
     else { ['#rgName', '#rgEmail', '#rgPin', '#rgPin2'].forEach(x => $(x).value = ''); msg(out, '', ''); saveToken(r.token); await afterAuth(); }
   } catch (e) { msg(out, 'err', 'تعذّر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.'); }
@@ -270,7 +273,7 @@ function renderPunch() {
   show('#closedNote', closed);
   if (closed) { const nx = nextOpening(e, now);
     $('#closedNote').innerHTML = offToday ? '<b>اليوم إجازتك</b><span>لا يوجد تسجيل حضور اليوم.</span>'
-      : `<b>التسجيل مغلق الآن</b><span>${nx ? `يفتح تسجيل الحضور الساعة ${fmtT(nx.at)} في ${esc(nx.b.name)}.` : 'لا يوجد دوام متاح الآن.'}</span>`; }
+      : `<b>التسجيل مغلق الآن</b><span>${nx ? `يفتح تسجيل الحضور الساعة ${fmtT(nx.at)}، وعندها تختار الفرع الذي تداوم فيه.` : 'لا يوجد دوام متاح الآن.'}</span>`; }
   if (open) { btn.className = 'punch out'; btn.innerHTML = 'انصراف<small>اضغط للتسجيل</small>'; btn.disabled = false; }
   else if (done) { btn.className = 'punch in'; btn.innerHTML = 'تم<small>انتهى دوام اليوم</small>'; btn.disabled = true; }
   else if (closed) { btn.className = 'punch in'; btn.innerHTML = 'مغلق<small>خارج وقت الدوام</small>'; btn.disabled = true; }
@@ -294,6 +297,11 @@ $('#punchBtn').onclick = async () => {
   if (!isEmp() || busy) return;
   const open = openRecord(me.id);
   if (!open && !picked) return msg(out, 'err', 'اختر الفرع الذي تداوم فيه.');
+  if (open) {
+    const minMs = (Number(cfg.minShift) || 0) * 6e4, left = open.inAt + minMs - Date.now();
+    if (left > 0) return msg(out, 'err', `لا يمكن تسجيل الانصراف قبل مرور ${cfg.minShift} دقيقة على الحضور. انتظر ${Math.ceil(left / 6e4)} دقيقة.`);
+    if (!confirm('هل تريد تسجيل الانصراف الآن؟')) return;
+  }
   busy = true; btn.disabled = true; msg(out, 'info', 'جاري تحديد موقعك…');
   let pos;
   try { pos = await getPos(); }
@@ -301,12 +309,14 @@ $('#punchBtn').onclick = async () => {
   const { latitude, longitude, accuracy } = pos.coords;
   msg(out, 'info', 'جاري التسجيل…');
   let data = null;
-  try { data = await call('att_punch', { p_branch: open ? open.branchId : picked, p_lat: latitude, p_lng: longitude, p_acc: accuracy }); } catch (e) {}
+  try { data = await call('att_punch', { p_branch: open ? open.branchId : picked, p_lat: latitude, p_lng: longitude, p_acc: accuracy, p_device: DEVICE }); } catch (e) {}
   busy = false;
   if (!data) { renderPunch(); return msg(out, 'err', 'لم يتم التسجيل. تحقق من الاتصال وحاول مرة أخرى.'); }
   if (!data.ok) {
     let t = PUNCH_ERR[data.error];
     if (data.error === 'too_far') t = `موقعك لا يطابق فرع ${data.branch}: أنت على بعد ${data.dist} متر منه، والمسموح ${data.radius} متر. دقة موقعك الآن ±${Math.round(accuracy)} متر؛ إن كانت كبيرة اقترب من باب الفرع وحاول مرة أخرى.`;
+    if (data.error === 'too_soon') t = `لا يمكن تسجيل الانصراف الآن. انتظر ${data.wait} دقيقة.`;
+    if (data.error === 'device') t = 'هذا الحساب مربوط بجوال آخر، ولا يمكن التسجيل من هذا الجوال. أرسلنا طلباً للمدير.';
     if (data.error === 'closed') t = data.opens ? `التسجيل مغلق الآن. يفتح الساعة ${fmtT(Date.parse(data.opens))}.` : 'التسجيل مغلق الآن.';
     await reloadRecent(); renderPunch(); return msg(out, 'err', t || 'لم يتم التسجيل.');
   }
@@ -339,17 +349,29 @@ function compute(from, to, branchId) {
         r.absent++; log.push({ d, e, rec: null, state: 'غائب', lm: 0, w: 0, o: 0 });
       }
     }
+    let leaveDays = 0;
+    leaves.filter(l => l.employee_id === e.id && l.status === 'approved').forEach(l => {
+      for (let d = l.day_from > from ? l.day_from : from; d <= l.day_to && d <= to && d <= today; d = addDays(d, 1)) if (!att[e.id + '_' + d]) leaveDays++;
+    });
+    r.leaveDays = leaveDays;
     const sal = Number(pay[e.id]) || 0, daily = sal / 30, mode = cfg.payMode || 'deduct';
     const bonusAt = Number(cfg.bonusAt) || 30, bonusDays = Number(cfg.bonusDays) || 0, work = Number(cfg.workDays) || 26;
     r.salary = sal; r.daily = daily;
     r.bonus = (period >= 28 && r.present >= Math.min(bonusAt, period)) ? bonusDays * daily : 0;
     if (mode === 'deduct') {
       const required = Math.max(0, Math.min(work, period - (30 - work)));
-      r.deductDays = Math.max(0, required - r.present); r.absent = r.deductDays;
+      r.deductDays = Math.max(0, required - r.present - leaveDays); r.absent = r.deductDays;
       r.extraDays = period >= 28 ? Math.max(0, r.present - required) : 0; r.bonus = r.extraDays * daily;
       r.base = Math.max(0, sal - r.deductDays * daily);
     } else { r.deductDays = null; r.extraDays = 0; r.base = r.present * daily; }
-    r.net = r.base + r.bonus;
+    const lm = cfg.lateMode || 'none';
+    r.lateDeduct = lm === 'count' ? Math.floor(r.lateN / (Number(cfg.lateN) || 3)) * (Number(cfg.lateDays) || 0) * daily
+      : lm === 'minute' ? r.lateMin * daily / ((Number(cfg.dayHours) || 10) * 60) : 0;
+    const mon = from.slice(0, 7), mine = adjs.filter(a => a.employee_id === e.id && a.month === mon);
+    r.adv = mine.filter(a => a.kind === 'advance').reduce((s, a) => s + Number(a.amount), 0);
+    r.ded = mine.filter(a => a.kind === 'deduction').reduce((s, a) => s + Number(a.amount), 0);
+    r.bon = mine.filter(a => a.kind === 'bonus').reduce((s, a) => s + Number(a.amount), 0);
+    r.net = Math.max(0, r.base + r.bonus - r.lateDeduct - r.adv - r.ded + r.bon);
     rows.push(r);
   }
   return { rows, log, period };
@@ -361,8 +383,10 @@ function renderBadges() {
   const n = isEmp() ? unread() : 0;
   $('#navBadge').textContent = n; show('#navBadge', !!n);
   $('#bellCount').textContent = n; show('#bellCount', !!n);
-  const nn = isMgr() ? cfg.employees.filter(e => e.status === 'pending').length : 0;
+  const nn = isMgr() ? cfg.employees.filter(e => e.status === 'pending' || (e.status === 'active' && e.devicePending)).length : 0;
   $('#setBadge').textContent = nn; show('#setBadge', !!nn);
+  const nl = isMgr() ? leaves.filter(l => l.status === 'pending').length : 0;
+  $('#todayBadge').textContent = nl; show('#todayBadge', !!nl);
 }
 async function markRead() { if (!isEmp() || !unread()) return; try { await call('att_mark_read'); notes.forEach(n => n.read_at = n.read_at || new Date().toISOString()); renderBadges(); } catch (e) {} }
 async function renderMine() {
@@ -383,7 +407,11 @@ async function renderMine() {
   $('#mySalary').innerHTML = !r.salary ? '<p class="muted small" style="margin:0">لم يُسجَّل راتبك بعد. راجع المدير.</p>' :
     `<div class="sums" style="margin:0 0 12px"><div><b>${money(r.net)}</b><span>المستحق لهذا الشهر حتى الآن</span></div><div><b>${money(r.salary)}</b><span>الراتب الشهري</span></div><div><b>${money(r.daily)}</b><span>قيمة اليوم</span></div><div><b>${money(r.bonus)}</b><span>${dm ? 'قيمة الأيام الزيادة' : 'المكافأة'}</span></div></div>
      <ul class="list">${dm ? `<li><span>أيام الدوام المطلوبة للراتب الكامل</span><b>${Number(cfg.workDays) || 26}</b></li><li><span>أيام الخصم</span><b>${r.deductDays}</b></li><li><span>أيام زيادة</span><b>${r.extraDays || 0}</b></li>` : ''}
-     <li><span>الأساسي المستحق</span><b>${money(r.base)}</b></li></ul>
+     <li><span>الأساسي المستحق</span><b>${money(r.base)}</b></li>
+     ${r.leaveDays ? `<li><span>أيام إجازة معتمدة</span><b>${r.leaveDays}</b></li>` : ''}
+     ${r.lateDeduct ? `<li><span>خصم التأخير (${r.lateN} مرة، ${r.lateMin} د)</span><b>−${money(r.lateDeduct)}</b></li>` : ''}
+     ${adjs.filter(a => a.employee_id === e.id && a.month === from.slice(0, 7)).map(a => `<li><span>${esc(ADJ_LBL[a.kind])}${a.note ? ' · ' + esc(a.note) : ''}</span><b>${a.kind === 'bonus' ? '+' : '−'}${money(Number(a.amount))}</b></li>`).join('')}
+     <li><span><b>صافي المستحق</b></span><b>${money(r.net)}</b></li></ul>
      <p class="small muted" style="margin:10px 0 0">الحساب يكتمل بنهاية الشهر.</p>`;
   const bn = id => branchById(id)?.name || '';
   $('#mineTable').innerHTML = `<thead><tr><th>التاريخ</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>الحالة</th><th>الساعات</th></tr></thead><tbody>` +
@@ -393,6 +421,26 @@ async function renderMine() {
   renderBadges();
 }
 $('#mineMonth').onchange = renderMine;
+const ADJ_LBL = { advance: 'سلفة', deduction: 'خصم', bonus: 'مكافأة' };
+const LV_KIND = { annual: 'إجازة سنوية', sick: 'إجازة مرضية', other: 'أخرى' };
+const LV_ST = { pending: '<span class="tag late">قيد المراجعة</span>', approved: '<span class="tag in">موافق عليها</span>', rejected: '<span class="tag abs">مرفوضة</span>' };
+function renderLeavesMine() {
+  if (!isEmp()) return;
+  if (!$('#lvFrom').value) { $('#lvFrom').value = addDays(dayKey(new Date()), 1); $('#lvTo').value = addDays(dayKey(new Date()), 1); }
+  const mine = leaves.filter(l => l.employee_id === me.id);
+  $('#lvMine').innerHTML = mine.map(l => `<li><span>${esc(LV_KIND[l.kind] || '')} · ${l.day_from.slice(5)} → ${l.day_to.slice(5)}</span><span>${LV_ST[l.status] || ''}${l.status === 'pending' ? ` <button class="btn small alt" data-lvc="${l.id}">إلغاء</button>` : ''}</span></li>`).join('');
+  $$('[data-lvc]').forEach(b => b.onclick = async () => { try { await call('att_leave_cancel', { p_id: +b.dataset.lvc }); await loadAll(); renderMine(); renderLeavesMine(); } catch (e) {} });
+}
+const LV_ERR = { dates: 'تحقق من التاريخين.', too_long: 'أقصى مدة للطلب 60 يوماً.', overlap: 'لديك طلب آخر في نفس الأيام.', not_active: 'حسابك غير مفعّل.' };
+$('#lvSend').onclick = async () => {
+  const out = $('#lvMsg'), f = $('#lvFrom').value, t = $('#lvTo').value;
+  if (!f || !t || t < f) return msg(out, 'err', LV_ERR.dates);
+  try { const r = await call('att_leave_request', { p_from: f, p_to: t, p_kind: $('#lvKind').value, p_note: $('#lvNote').value });
+    if (!r.ok) return msg(out, 'err', LV_ERR[r.error] || 'لم يتم الإرسال.');
+    $('#lvNote').value = ''; await loadAll(); renderMine(); renderLeavesMine(); msg(out, 'ok', 'تم إرسال طلب الإجازة للمدير.'); }
+  catch (e) { msg(out, 'err', 'لم يتم الإرسال. حاول مرة أخرى.'); }
+};
+
 
 /* ======================= manager: today ======================= */
 function renderToday() {
@@ -435,7 +483,80 @@ document.addEventListener('click', async ev => {
   const b = branchById(id); if (b) { b.start = st; b.end = en; } draft = null; renderAll();
 });
 
+/* ======================= manager: summary / leaves / broadcast ======================= */
+let sumText = '';
+function renderSummary() {
+  if (!isMgr()) return;
+  const t = dayKey(new Date()), now = Date.now(), grace = Number(cfg.grace) || 0;
+  let onTime = 0, late = 0, notIn = 0, off = 0, waiting = 0; const lateList = [], absList = [];
+  staff().forEach(e => {
+    const rec = openRecord(e.id) || att[e.id + '_' + t];
+    if (rec) { const lm = Math.round((rec.inAt - (rec.ss || shiftOf(e, rec.day, rec.branchId).s)) / 6e4);
+      if (lm > grace) { late++; lateList.push(`${e.name} — ${branchById(rec.branchId)?.name || ''} — ${lm} ${TR('د')}`); } else onTime++; return; }
+    if (isOff(e, t)) { off++; return; }
+    const starts = cfg.branches.map(b => shiftOf(e, t, b.id).s);
+    const deadline = (starts.length ? Math.max(...starts) : shiftOf(e, t).s) + grace * 6e4;
+    if (now > deadline) { notIn++; absList.push(e.name); } else waiting++;
+  });
+  $('#sumBox').innerHTML = `<div><b>${onTime + late}</b><span>حضروا</span></div><div><b>${onTime}</b><span>في الموعد</span></div><div><b>${late}</b><span>متأخرون</span></div><div><b>${notIn}</b><span>لم يسجّلوا</span></div>`;
+  $('#sumLate').innerHTML = (lateList.length ? `<p class="small" style="margin:6px 0 4px"><b>المتأخرون</b></p><ul class="list sumLate">${lateList.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '')
+    + (absList.length ? `<p class="small" style="margin:10px 0 4px"><b>لم يسجّلوا بعد موعدهم</b></p><ul class="list sumLate">${absList.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '')
+    + (off || waiting ? `<p class="small muted" style="margin:10px 0 0">${esc(TR('إجازة'))}: ${off} · ${esc(TR('لم يحن موعدهم'))}: ${waiting}</p>` : '');
+  sumText = `RQ Kitchen — ${t}\n✅ ${TR('حضروا')}: ${onTime + late}\n⏰ ${TR('متأخرون')}: ${late}${lateList.length ? '\n' + lateList.map(x => '• ' + x).join('\n') : ''}\n❌ ${TR('لم يسجّلوا')}: ${notIn}${absList.length ? '\n' + absList.map(x => '• ' + x).join('\n') : ''}`;
+}
+$('#sumShare').onclick = async () => {
+  if (navigator.share) { try { await navigator.share({ text: sumText }); } catch (e) {} return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(sumText), '_blank');
+};
+function renderLeavesMgr() {
+  if (!isMgr()) return;
+  const pend = leaves.filter(l => l.status === 'pending'), name = id => empById(id)?.name || '';
+  show('#leavePanel', pend.length > 0);
+  $('#leaveList').innerHTML = pend.map(l => `<div class="lv"><div class="who"><b>${esc(name(l.employee_id))}</b><span class="small muted">${esc(TR(LV_KIND[l.kind] || ''))} · ${l.day_from} → ${l.day_to}${l.note ? ' · ' + esc(l.note) : ''}</span></div>
+    <div class="acts"><button class="btn small mustard" data-lva="${l.id}">موافقة</button><button class="btn small danger" data-lvr="${l.id}">رفض</button></div></div>`).join('');
+  const act = async (id, st) => { try { await call('att_mgr_leave', { p_id: id, p_status: st }); await loadAll(); renderAll(); } catch (e) {} };
+  $$('[data-lva]').forEach(b => b.onclick = () => act(+b.dataset.lva, 'approved'));
+  $$('[data-lvr]').forEach(b => b.onclick = () => { if (confirm('رفض طلب الإجازة؟')) act(+b.dataset.lvr, 'rejected'); });
+}
+function renderBroadcast() {
+  if (!isMgr()) return; const sel = $('#bcBranch'), cur = sel.value;
+  sel.innerHTML = '<option value="">كل الموظفين</option>' + cfg.branches.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join(''); sel.value = cur;
+}
+$('#bcSend').onclick = async () => {
+  const out = $('#bcMsg'), body = $('#bcBody').value.trim(); if (body.length < 2) return msg(out, 'err', 'اكتب نص الإعلان.');
+  if (!confirm('إرسال الإعلان؟')) return;
+  try { const n = await call('att_mgr_broadcast', { p_body: body, p_branch: $('#bcBranch').value || null }); $('#bcBody').value = ''; msg(out, 'ok', `تم إرسال الإعلان إلى ${n} موظف.`); }
+  catch (e) { msg(out, 'err', 'لم يتم الإرسال. حاول مرة أخرى.'); }
+};
+
+/* ======================= manager: adjustments ======================= */
+let adSig = '';
+function renderAdj() {
+  if (!isMgr()) return;
+  const list = staff(), sig = list.map(e => e.id).join();
+  if (sig !== adSig) { adSig = sig; const c = $('#adEmp').value; $('#adEmp').innerHTML = list.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join(''); if (c) $('#adEmp').value = c; }
+  if (!$('#adMonth').value) $('#adMonth').value = dayKey(new Date()).slice(0, 7);
+  const mon = $('#adMonth').value, rows = adjs.filter(a => a.month === mon), name = id => empById(id)?.name || '';
+  $('#adTable').innerHTML = rows.length ? `<thead><tr><th>الموظف</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr></thead><tbody>` +
+    rows.map(a => `<tr><td>${esc(name(a.employee_id))}</td><td>${esc(ADJ_LBL[a.kind])}</td><td class="num">${a.kind === 'bonus' ? '+' : '−'}${money(Number(a.amount))}</td><td>${esc(a.note || '')}</td><td><button class="btn small danger" data-add="${a.id}">حذف</button></td></tr>`).join('') + '</tbody>'
+    : `<tbody><tr><td class="muted">لا توجد بنود لهذا الشهر.</td></tr></tbody>`;
+  $$('[data-add]').forEach(b => b.onclick = async () => { if (!confirm('حذف هذا البند؟')) return;
+    try { await call('att_mgr_adjust', { p_emp: null, p_month: null, p_kind: null, p_amount: null, p_note: null, p_delete: +b.dataset.add }); await ensureMonth(mon); renderReports(); renderAdj(); } catch (e) {} });
+}
+async function ensureMonth(mon) { await loadAll(); if (mon + '-01' < loadedFrom) await ensureFrom(mon + '-01'); }
+$('#adMonth').onchange = renderAdj;
+$('#adAdd').onclick = async () => {
+  const out = $('#adMsg'), amt = Number($('#adAmount').value), mon = $('#adMonth').value;
+  if (!$('#adEmp').value || !mon) return msg(out, 'err', 'اختر الموظف والشهر.');
+  if (!(amt > 0)) return msg(out, 'err', 'اكتب المبلغ.');
+  try { const r = await call('att_mgr_adjust', { p_emp: $('#adEmp').value, p_month: mon, p_kind: $('#adKind').value, p_amount: amt, p_note: $('#adNote').value, p_delete: null });
+    if (!r.ok) return msg(out, 'err', 'لم يتم الحفظ.');
+    $('#adAmount').value = ''; $('#adNote').value = ''; await ensureMonth(mon); renderReports(); renderAdj(); msg(out, 'ok', 'تمت الإضافة، ووصل للموظف تنبيه.'); }
+  catch (e) { msg(out, 'err', 'لم يتم الحفظ. حاول مرة أخرى.'); }
+};
+
 /* ======================= manager: schedule ======================= */
+
 let scDraft = null, scDay = null;
 function scLoad(day) { scDay = day; $('#scDay').value = day; scDraft = JSON.parse(JSON.stringify(sched[day]?.o || {})); renderSched(); }
 function renderSched() {
@@ -487,7 +608,7 @@ function renderManual() {
     $('#mrBranch').innerHTML = cfg.branches.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
     if (ce && list.some(e => e.id === ce)) $('#mrEmp').value = ce;
     if (cb && branchById(cb)) $('#mrBranch').value = cb;
-    if (!$('#mrDay').value) $('#mrDay').value = addDays(dayKey(new Date()), -1);
+    if (!$('#mrDay').value) $('#mrDay').value = dayKey(new Date());
     $('#mrDay').max = dayKey(new Date());
     mrFill();
   }
@@ -562,8 +683,8 @@ async function renderReports() {
   $('#payNote').textContent = mode === 'deduct' ? `راتب كامل لمن يداوم ${Number(cfg.workDays) || 26} يوماً. يُخصم عن كل يوم ناقص، ويُضاف عن كل يوم زيادة.` : `يُدفع عن كل يوم حضور، مع مكافأة ${Number(cfg.bonusDays) || 0} أيام لمن يحضر ${Number(cfg.bonusAt) || 30} يوماً.`;
   const T = rows.reduce((a, r) => ({ s: a.s + r.salary, b: a.b + r.bonus, n: a.n + r.net, c: a.c + (r.bonus ? 1 : 0) }), { s: 0, b: 0, n: 0, c: 0 });
   $('#paySums').innerHTML = `<div><b>${money(T.n)}</b><span>إجمالي المستحق</span></div><div><b>${money(T.s)}</b><span>إجمالي الرواتب</span></div><div><b>${money(T.b)}</b><span>${mode === 'deduct' ? 'قيمة الأيام الزيادة' : 'المكافآت'}</span></div><div><b>${T.c}</b><span>${mode === 'deduct' ? 'داوموا أيام زيادة' : 'حصلوا على المكافأة'}</span></div>`;
-  $('#payTable').innerHTML = `<thead><tr><th>الموظف</th><th>الراتب</th><th>قيمة اليوم</th><th>أيام الحضور</th>${mode === 'deduct' ? '<th>أيام الخصم</th><th>أيام زيادة</th>' : ''}<th>${mode === 'deduct' ? 'قيمة الزيادة' : 'المكافأة'}</th><th>المستحق</th></tr></thead><tbody>` +
-    (rows.length ? rows.map(r => `<tr><td>${esc(r.e.name)}</td><td class="num">${r.salary ? money(r.salary) : '<span class="muted">غير محدد</span>'}</td><td class="num">${money(r.daily)}</td><td class="num">${r.present}</td>${mode === 'deduct' ? `<td class="num">${r.deductDays}</td><td class="num">${r.extraDays}</td>` : ''}<td class="num">${r.bonus ? money(r.bonus) : '—'}</td><td class="num pay">${money(r.net)}</td></tr>`).join('') : '<tr><td colspan="8" class="muted">لا يوجد موظفون.</td></tr>') + '</tbody>';
+  $('#payTable').innerHTML = `<thead><tr><th>الموظف</th><th>الراتب</th><th>قيمة اليوم</th><th>أيام الحضور</th>${mode === 'deduct' ? '<th>أيام الخصم</th><th>أيام زيادة</th>' : ''}<th>${mode === 'deduct' ? 'قيمة الزيادة' : 'المكافأة'}</th><th>خصم التأخير</th><th>سلف وخصومات</th><th>مكافآت</th><th>المستحق</th></tr></thead><tbody>` +
+    (rows.length ? rows.map(r => `<tr><td>${esc(r.e.name)}</td><td class="num">${r.salary ? money(r.salary) : '<span class="muted">غير محدد</span>'}</td><td class="num">${money(r.daily)}</td><td class="num">${r.present}</td>${mode === 'deduct' ? `<td class="num">${r.deductDays}</td><td class="num">${r.extraDays}</td>` : ''}<td class="num">${r.bonus ? money(r.bonus) : '—'}</td><td class="num">${r.lateDeduct ? '−' + money(r.lateDeduct) : '—'}</td><td class="num">${r.adv + r.ded ? '−' + money(r.adv + r.ded) : '—'}</td><td class="num">${r.bon ? '+' + money(r.bon) : '—'}</td><td class="num pay">${money(r.net)}</td></tr>`).join('') : '<tr><td colspan="11" class="muted">لا يوجد موظفون.</td></tr>') + '</tbody>';
 }
 $('#exportBtn').onclick = async () => {
   const out = $('#exportMsg'), from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
@@ -571,7 +692,7 @@ $('#exportBtn').onclick = async () => {
   if (from < loadedFrom) await ensureFrom(from);
   const { rows, log } = compute(from, to, bid), bn = id => branchById(id)?.name || '', dm = (cfg.payMode || 'deduct') === 'deduct';
   const pr = rows.map(r => { const o = { 'الموظف': r.e.name, 'البريد': r.e.email || '', 'الفروع': bnames(r.e), 'الراتب الشهري': r.salary, 'قيمة اليوم': +r.daily.toFixed(2), 'أيام الحضور': r.present };
-    if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['صافي المستحق'] = +r.net.toFixed(2); return o; });
+    if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['أيام إجازة معتمدة'] = r.leaveDays; o['خصم التأخير'] = +r.lateDeduct.toFixed(2); o['سلف'] = r.adv; o['خصومات'] = r.ded; o['مكافآت'] = r.bon; o['صافي المستحق'] = +r.net.toFixed(2); return o; });
   const sum = rows.map(r => ({ 'الموظف': r.e.name, 'الفروع': bnames(r.e), 'أيام الحضور': r.present, 'أيام الغياب': r.absent, 'مرات التأخير': r.lateN, 'دقائق التأخير': r.lateMin, 'ساعات العمل': +h2(r.hours), 'ساعات إضافية': +h2(r.ot), 'أيام بدون انصراف': r.noOut }));
   const det = log.sort((a, b) => a.d < b.d ? -1 : 1).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
   const tk = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
@@ -586,7 +707,8 @@ $('#exportBtn').onclick = async () => {
 /* ======================= manager: settings ======================= */
 let draft = null, payDraft = {};
 function startDraft() {
-  draft = { settings: { grace: cfg.grace, openLead: cfg.openLead, payMode: cfg.payMode, workDays: cfg.workDays, bonusAt: cfg.bonusAt, bonusDays: cfg.bonusDays, requireApproval: cfg.requireApproval },
+  draft = { settings: { grace: cfg.grace, openLead: cfg.openLead, payMode: cfg.payMode, workDays: cfg.workDays, bonusAt: cfg.bonusAt, bonusDays: cfg.bonusDays, requireApproval: cfg.requireApproval,
+      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift },
     branches: JSON.parse(JSON.stringify(cfg.branches)), employees: JSON.parse(JSON.stringify(staff().filter(e => e.status === 'active'))) };
   payDraft = Object.assign({}, pay);
 }
@@ -596,6 +718,8 @@ function renderSettings() {
   if (!draft) startDraft();
   const S = draft.settings;
   $('#sGrace').value = S.grace; $('#sLead').value = S.openLead; $('#sApprove').checked = !!S.requireApproval;
+  $('#sLateMode').value = S.lateMode || 'none'; $('#sLateN').value = S.lateN; $('#sLateDays').value = S.lateDays; $('#sDayHours').value = S.dayHours; $('#sMinShift').value = S.minShift;
+  toggleLate(S.lateMode || 'none');
   $('#sMode').value = S.payMode; $('#sBonusAt').value = S.bonusAt; $('#sBonusDays').value = S.bonusDays; $('#sWork').value = S.workDays; toggleMode(S.payMode);
   // pending registrations
   const pend = cfg.employees.filter(e => e.status === 'pending');
@@ -626,12 +750,13 @@ function renderSettings() {
   // employees
   const offOpts = '<option value="-1">لا يوجد</option>' + DAYS.map((d, i) => `<option value="${i}">${d}</option>`).join('');
   $('#empEdit').innerHTML = draft.employees.length ? draft.employees.map((e, i) => `<div class="emp-row">
+    ${e.devicePending ? '<p class="small" style="margin:0 0 8px;color:var(--warn)">يطلب الدخول من جوال جديد.</p>' : ''}
     <div class="row"><div><label>الاسم</label><input data-e="${i}" data-k="name" value="${esc(e.name)}"></div>
     <div><label>الراتب الشهري (درهم)</label><input type="number" min="0" data-sal="${esc(e.id)}" value="${esc(payDraft[e.id] ?? '')}"></div></div>
     <p class="small muted" style="margin:8px 0 0" dir="ltr">${esc(e.email || '')}</p>
     <div style="margin-top:10px"><label>فروعه الأساسية للتقارير (يستطيع التسجيل من أي فرع)</label><div class="checks">${draft.branches.filter(b => !String(b.id).startsWith('new-')).map(b => `<label><input type="checkbox" data-eb="${i}" value="${esc(b.id)}" ${e.branchIds.includes(b.id) ? 'checked' : ''}>${esc(b.name)}</label>`).join('')}</div></div>
     <div class="row" style="margin-top:10px"><div><label>يوم الإجازة الأسبوعي</label><select data-e="${i}" data-k="off">${offOpts}</select></div>
-    <div style="display:flex;align-items:flex-end;gap:6px"><button class="btn alt" data-pin="${esc(e.id)}">رقم سري جديد</button><button class="btn danger" data-stop="${esc(e.id)}">إيقاف</button></div></div></div>`).join('')
+    <div style="display:flex;align-items:flex-end;gap:6px">${e.devicePending ? `<button class="btn mustard" data-dev="${esc(e.id)}">موافقة على جوال جديد</button>` : e.hasDevice ? `<button class="btn alt" data-devreset="${esc(e.id)}">فك ربط الجوال</button>` : ''}<button class="btn alt" data-pin="${esc(e.id)}">رقم سري جديد</button><button class="btn danger" data-stop="${esc(e.id)}">إيقاف</button></div></div></div>`).join('')
     : '<p class="muted small">لا يوجد موظفون معتمدون بعد. أرسل رابط التطبيق للموظفين ليسجلوا حساباتهم.</p>';
   draft.employees.forEach((e, i) => { const el = $(`select[data-e="${i}"][data-k="off"]`); if (el) el.value = String(e.off ?? -1); });
   $$('[data-e]').forEach(el => el.onchange = el.oninput = () => { const k = el.dataset.k; draft.employees[el.dataset.e][k] = k === 'off' ? Number(el.value) : el.value; });
@@ -644,6 +769,13 @@ function renderSettings() {
     try { const r = await call('att_mgr_reset_pin', { p_id: el.dataset.pin, p_pin: p.trim() }); msg($('#saveMsg'), r.ok ? 'ok' : 'err', r.ok ? 'تم تعيين الرقم السري الجديد. أعطه للموظف.' : ACC_ERR.pin); }
     catch (x) { msg($('#saveMsg'), 'err', 'لم يتم التنفيذ. حاول مرة أخرى.'); }
   });
+  $$('[data-dev]').forEach(el => el.onclick = async () => {
+    try { await call('att_mgr_employee', { p_id: el.dataset.dev, p: { device: 'approve' } }); draft = null; await loadAll(); renderAll(); msg($('#saveMsg'), 'ok', 'تمت الموافقة على الجوال الجديد، ووصل للموظف تنبيه.'); }
+    catch (x) { msg($('#saveMsg'), 'err', 'لم يتم التنفيذ. حاول مرة أخرى.'); } });
+  $$('[data-devreset]').forEach(el => el.onclick = async () => {
+    if (!confirm('فك ربط الجوال؟ سيُربط الحساب بأول جوال يدخل منه الموظف.')) return;
+    try { await call('att_mgr_employee', { p_id: el.dataset.devreset, p: { device: 'reset' } }); draft = null; await loadAll(); renderAll(); msg($('#saveMsg'), 'ok', 'تم فك ربط الجوال.'); }
+    catch (x) { msg($('#saveMsg'), 'err', 'لم يتم التنفيذ. حاول مرة أخرى.'); } });
   $$('[data-stop]').forEach(el => el.onclick = () => { if (confirm('إيقاف هذا الحساب؟ لن يستطيع الدخول، وتبقى سجلاته محفوظة.')) setStatus(el.dataset.stop, 'disabled'); });
 }
 $('#sGrace').oninput = e => draft && (draft.settings.grace = Number(e.target.value) || 0);
@@ -652,6 +784,12 @@ $('#sApprove').onchange = e => draft && (draft.settings.requireApproval = e.targ
 $('#sMode').onchange = e => { if (draft) { draft.settings.payMode = e.target.value; toggleMode(e.target.value); } };
 $('#sBonusAt').oninput = e => draft && (draft.settings.bonusAt = Number(e.target.value) || 30);
 $('#sBonusDays').oninput = e => draft && (draft.settings.bonusDays = Number(e.target.value) || 0);
+function toggleLate(m) { $$('.lateCount').forEach(x => x.classList.toggle('hidden', m !== 'count')); $$('.lateMinute').forEach(x => x.classList.toggle('hidden', m !== 'minute')); }
+$('#sLateMode').onchange = e => { if (draft) { draft.settings.lateMode = e.target.value; toggleLate(e.target.value); } };
+$('#sLateN').oninput = e => draft && (draft.settings.lateN = Math.max(1, Number(e.target.value) || 3));
+$('#sLateDays').oninput = e => draft && (draft.settings.lateDays = Math.max(0, Number(e.target.value) || 0));
+$('#sDayHours').oninput = e => draft && (draft.settings.dayHours = Math.max(1, Number(e.target.value) || 10));
+$('#sMinShift').oninput = e => draft && (draft.settings.minShift = Math.max(0, Number(e.target.value) || 0));
 $('#sWork').oninput = e => draft && (draft.settings.workDays = Number(e.target.value) || 26);
 $('#addBranch').onclick = () => { draft.branches.push({ id: 'new-' + Date.now(), name: 'فرع جديد', lat: null, lng: null, radius: 10, start: '14:00', end: '00:30', sort: draft.branches.length + 1 }); renderSettings(); };
 async function setStatus(id, status) {
@@ -665,7 +803,8 @@ $('#saveCfg').onclick = async () => {
   const out = $('#saveMsg'), btn = $('#saveCfg'); btn.disabled = true; msg(out, 'info', 'جاري الحفظ…');
   try {
     const S = draft.settings;
-    await call('att_mgr_settings', { p: { grace_min: S.grace, open_lead_min: S.openLead, pay_mode: S.payMode, work_days: S.workDays, bonus_at: S.bonusAt, bonus_days: S.bonusDays, require_approval: S.requireApproval } });
+    await call('att_mgr_settings', { p: { grace_min: S.grace, open_lead_min: S.openLead, pay_mode: S.payMode, work_days: S.workDays, bonus_at: S.bonusAt, bonus_days: S.bonusDays, require_approval: S.requireApproval,
+      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift } });
     const keepIds = draft.branches.map(b => b.id);
     for (const [i, b] of draft.branches.entries()) {
       const row = { name: b.name.trim() || 'فرع', lat: b.lat, lng: b.lng, radius_m: Math.max(5, Number(b.radius) || 10), start_time: b.start || '14:00', end_time: b.end || '00:30', sort: i + 1 };
@@ -784,11 +923,11 @@ function renderAll() {
   applyRole(); renderBadges();
   if (!me || me.status !== 'active') return;
   renderPunch();
-  if (isEmp() && curTab === 'mine') renderMine();
+  if (isEmp() && curTab === 'mine') { renderMine(); renderLeavesMine(); }
   if (isMgr()) {
-    if (curTab === 'today') renderToday();
+    if (curTab === 'today') { renderSummary(); renderLeavesMgr(); renderToday(); renderBroadcast(); }
     if (curTab === 'sched') { renderSched(); renderManual(); }
-    if (curTab === 'reports') renderReports();
+    if (curTab === 'reports') { renderReports(); renderAdj(); }
     if (curTab === 'settings') renderSettings();
   }
 }

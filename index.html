@@ -43,7 +43,7 @@
 <nav class="tabs hidden" role="tablist"><div class="tabs-in">
   <button role="tab" data-tab="punch" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>تسجيل</span></button>
   <button role="tab" data-tab="mine" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>تقاريري</span><span class="badge hidden" id="navBadge"></span></button>
-  <button role="tab" data-tab="today" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>اليوم</span></button>
+  <button role="tab" data-tab="today" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>اليوم</span><span class="badge hidden" id="todayBadge"></span></button>
   <button role="tab" data-tab="sched" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>الجدول</span></button>
   <button role="tab" data-tab="reports" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>التقارير</span></button>
   <button role="tab" data-tab="settings" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span>الإعدادات</span><span class="badge hidden" id="setBadge"></span></button>
@@ -139,6 +139,20 @@
       <div id="mySalary"></div>
     </div>
     <div class="panel">
+      <h3>طلب إجازة</h3>
+      <div class="row">
+        <div><label for="lvFrom">من</label><input type="date" id="lvFrom"></div>
+        <div><label for="lvTo">إلى</label><input type="date" id="lvTo"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label for="lvKind">النوع</label><select id="lvKind"><option value="annual">إجازة سنوية</option><option value="sick">إجازة مرضية</option><option value="other">أخرى</option></select></div>
+        <div><label for="lvNote">ملاحظة</label><input id="lvNote" maxlength="200"></div>
+      </div>
+      <div class="actions"><button class="btn mustard" id="lvSend" type="button">إرسال الطلب</button></div>
+      <div id="lvMsg"></div>
+      <ul class="list" id="lvMine" style="margin-top:10px"></ul>
+    </div>
+    <div class="panel">
       <h3>سجل الأيام</h3>
       <div class="scroll"><table id="mineTable"></table></div>
     </div>
@@ -155,7 +169,28 @@
   </section>
 
   <!-- ================= Manager: today ================= -->
-  <section id="tab-today" class="hidden"><div id="todayBox"></div></section>
+  <section id="tab-today" class="hidden">
+    <div class="panel" id="sumPanel">
+      <div class="branchHead"><h2 style="margin:0">ملخص اليوم</h2><button class="btn small mustard" id="sumShare" type="button">مشاركة</button></div>
+      <div class="sums" id="sumBox" style="margin-top:14px"></div>
+      <div id="sumLate"></div>
+    </div>
+    <div class="panel hidden" id="leavePanel">
+      <h3>طلبات الإجازة</h3>
+      <div id="leaveList"></div>
+    </div>
+    <div id="todayBox"></div>
+    <div class="panel">
+      <h3>إرسال إعلان للموظفين</h3>
+      <p class="muted small" style="margin:0 0 10px">يصل كتنبيه داخل التطبيق.</p>
+      <textarea id="bcBody" rows="3" class="ta" placeholder="اكتب الإعلان هنا…"></textarea>
+      <div class="row" style="margin-top:10px">
+        <div><label for="bcBranch">إلى</label><select id="bcBranch"></select></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn mustard" id="bcSend" type="button">إرسال الإعلان</button></div>
+      </div>
+      <div id="bcMsg"></div>
+    </div>
+  </section>
 
   <!-- ================= Manager: schedule ================= -->
   <section id="tab-sched" class="hidden">
@@ -223,6 +258,22 @@
       <div class="scroll"><table id="payTable"></table></div>
     </div>
     <div class="panel">
+      <h3>سلف وخصومات ومكافآت</h3>
+      <p class="muted small" style="margin:0 0 10px">تُطبَّق على راتب الشهر المختار، وتصل للموظف كتنبيه.</p>
+      <div class="row">
+        <div><label for="adEmp">الموظف</label><select id="adEmp"></select></div>
+        <div><label for="adMonth">الشهر</label><input type="month" id="adMonth"></div>
+      </div>
+      <div class="row3" style="margin-top:10px">
+        <div><label for="adKind">النوع</label><select id="adKind"><option value="advance">سلفة</option><option value="deduction">خصم</option><option value="bonus">مكافأة</option></select></div>
+        <div><label for="adAmount">المبلغ (درهم)</label><input type="number" id="adAmount" min="1" step="0.01"></div>
+        <div><label for="adNote">ملاحظة</label><input id="adNote" maxlength="200"></div>
+      </div>
+      <div class="actions"><button class="btn mustard" id="adAdd" type="button">إضافة</button></div>
+      <div id="adMsg"></div>
+      <div class="scroll" style="margin-top:10px"><table id="adTable"></table></div>
+    </div>
+    <div class="panel">
       <h3>ملخص الموظفين</h3>
       <div class="sums" id="sums"></div>
       <div class="scroll"><table id="empTable"></table></div>
@@ -252,6 +303,21 @@
         <div class="bonusF"><label for="sBonusDays">قيمة المكافأة (أيام)</label><input type="number" id="sBonusDays" min="0"></div>
         <div id="restWrap"><label for="sWork">أيام الدوام للراتب الكامل</label><input type="number" id="sWork" min="1" max="31"></div>
       </div>
+    </div>
+    <div class="panel">
+      <h2>التأخير والانصراف</h2>
+      <div><label for="sLateMode">خصم التأخير من الراتب</label>
+        <select id="sLateMode">
+          <option value="none">لا يوجد خصم (يُسجَّل فقط)</option>
+          <option value="count">خصم أيام حسب عدد مرات التأخير</option>
+          <option value="minute">خصم بالدقيقة</option>
+        </select></div>
+      <div class="row3" style="margin-top:10px">
+        <div class="lateCount"><label for="sLateN">كل كم مرة تأخير</label><input type="number" id="sLateN" min="1"></div>
+        <div class="lateCount"><label for="sLateDays">يُخصم (أيام)</label><input type="number" id="sLateDays" min="0" step="0.25"></div>
+        <div class="lateMinute"><label for="sDayHours">ساعات يوم العمل</label><input type="number" id="sDayHours" min="1" step="0.5"></div>
+      </div>
+      <div style="margin-top:10px"><label for="sMinShift">أقل وقت بين الحضور والانصراف (دقائق)</label><input type="number" id="sMinShift" min="0" max="600"></div>
     </div>
     <div class="panel">
       <h2>الفروع ومواقعها</h2>

@@ -34,3 +34,10 @@ body.standalone .install{display:none!important}
 .leaflet-container{font-family:inherit}
 body.noscroll{overflow:hidden}
 .rowline{display:flex;justify-content:space-between;gap:10px;align-items:center}
+
+.ta{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);font:inherit;color:inherit;resize:vertical}
+.ta:focus{border-color:var(--gold);outline:none}
+.lv{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-radius:12px;margin-bottom:8px;background:var(--chip)}
+.lv .who b{display:block}
+.lv .acts{display:flex;gap:6px}
+.sumLate li{font-size:14px}
