@@ -23,6 +23,7 @@ const fmtHM = x => tFmt.format(new Date(at('2000-01-01', x.start))) + ' – ' + 
 const h2 = x => (Math.round(x * 100) / 100).toFixed(2);
 const money = x => (Math.round(x * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const hm5 = t => (t || '').slice(0, 5);
+const hmFmt0 = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Dubai' });
 const msg = (el, type, text) => { if (el) el.innerHTML = text ? `<div class="msg ${type}">${esc(text)}</div>` : ''; };
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
@@ -90,7 +91,7 @@ function applyData(d, merge) {
   const st = d.settings || {};
   Object.assign(cfg, { grace: st.grace_min, openLead: st.open_lead_min, payMode: st.pay_mode, workDays: st.work_days,
     bonusAt: st.bonus_at, bonusDays: st.bonus_days, requireApproval: st.require_approval,
-    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0 });
+    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0, earlyOut: st.early_out_min == null ? 15 : Number(st.early_out_min), mainTime: hm5(st.main_time) || '14:30', pointValue: Number(st.point_value) || 0 });
   cfg.branches = (d.branches || []).map(mapBranch);
   cfg.employees = isMgr() ? (d.employees || []).map(mapEmp) : [me];
   pay = {}; (d.salaries || []).forEach(r => pay[r.employee_id] = Number(r.monthly));
@@ -122,7 +123,9 @@ window.addEventListener('online', () => { setNet('wait'); refresh(); });
 window.addEventListener('offline', () => setNet('off'));
 let refreshing = false;
 async function refresh() {
-  if (!token || refreshing || busy || draft) return;
+  if (!token || refreshing || busy) return;
+  const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if (draft && typing) return;                       // don't redraw while the manager is typing in settings
   refreshing = true;
   const was = me && me.status;
   try { await loadAll(); if ((me && me.status) !== was) return afterAuth(); renderAll(); }
@@ -288,6 +291,7 @@ function getPos() {
     navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   });
 }
+const earlyMsg = () => '⚠️ لا يمكن تسجيل الانصراف الآن، لم ينتهِ موعد الدوام بعد. الخروج قبل الموعد سيتم خصمه، ويجب الالتزام بالموعد مثل باقي فريق العمل.';
 const PUNCH_ERR = {
   auth: 'انتهت الجلسة. ادخل مرة أخرى.', not_active: 'حسابك غير مفعّل. راجع المدير.', no_branch: 'اختر الفرع.',
   no_location: 'موقع هذا الفرع غير محدد. راجع المدير.', day_off: 'اليوم إجازتك حسب الجدول.', done_today: 'سجلت حضورك وانصرافك اليوم.'
@@ -300,6 +304,8 @@ $('#punchBtn').onclick = async () => {
   if (open) {
     const minMs = (Number(cfg.minShift) || 0) * 6e4, left = open.inAt + minMs - Date.now();
     if (left > 0) return msg(out, 'err', `لا يمكن تسجيل الانصراف قبل مرور ${cfg.minShift} دقيقة على الحضور. انتظر ${Math.ceil(left / 6e4)} دقيقة.`);
+    const eo = Number(cfg.earlyOut) || 0;
+    if (eo > 0 && open.se && Date.now() < open.se - eo * 6e4) return msg(out, 'err', earlyMsg(open.se - eo * 6e4));
     if (!confirm('هل تريد تسجيل الانصراف الآن؟')) return;
   }
   busy = true; btn.disabled = true; msg(out, 'info', 'جاري تحديد موقعك…');
@@ -315,6 +321,7 @@ $('#punchBtn').onclick = async () => {
   if (!data.ok) {
     let t = PUNCH_ERR[data.error];
     if (data.error === 'too_far') t = `موقعك لا يطابق فرع ${data.branch}: أنت على بعد ${data.dist} متر منه، والمسموح ${data.radius} متر. دقة موقعك الآن ±${Math.round(accuracy)} متر؛ إن كانت كبيرة اقترب من باب الفرع وحاول مرة أخرى.`;
+    if (data.error === 'too_early') t = earlyMsg(Date.parse(data.allowed));
     if (data.error === 'too_soon') t = `لا يمكن تسجيل الانصراف الآن. انتظر ${data.wait} دقيقة.`;
     if (data.error === 'device') t = 'هذا الحساب مربوط بجوال آخر، ولا يمكن التسجيل من هذا الجوال. أرسلنا طلباً للمدير.';
     if (data.error === 'closed') t = data.opens ? `التسجيل مغلق الآن. يفتح الساعة ${fmtT(Date.parse(data.opens))}.` : 'التسجيل مغلق الآن.';
@@ -322,7 +329,12 @@ $('#punchBtn').onclick = async () => {
   }
   await reloadRecent(); renderPunch();
   if (data.action === 'out') msg(out, 'ok', `تم تسجيل انصرافك الساعة ${fmtT(Date.parse(data.at))} في ${data.branch}.`);
-  else msg(out, 'ok', data.late_min > (cfg.grace || 0) ? `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).` : `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))}.`);
+  else if (data.late_min > (cfg.grace || 0)) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
+  else {
+    const first = (me.name || '').trim().split(/\s+/)[0], early = hmFmt0.format(new Date(Date.parse(data.at))) <= (cfg.mainTime || '14:30');
+    msg(out, 'ok', early ? `🌟 ممتاز يا ${first}! حضرت قبل موعد العمل الرئيسي. انصرف في الموعد لتحصل على نقطتين تميّز اليوم.`
+      : `👏 أحسنت يا ${first}! حضرت في الموعد. انصرف في الموعد لتحصل على نقطة تميّز اليوم.`);
+  }
   if (navigator.vibrate) navigator.vibrate(60);
 };
 
@@ -371,10 +383,35 @@ function compute(from, to, branchId) {
     r.adv = mine.filter(a => a.kind === 'advance').reduce((s, a) => s + Number(a.amount), 0);
     r.ded = mine.filter(a => a.kind === 'deduction').reduce((s, a) => s + Number(a.amount), 0);
     r.bon = mine.filter(a => a.kind === 'bonus').reduce((s, a) => s + Number(a.amount), 0);
-    r.net = Math.max(0, r.base + r.bonus - r.lateDeduct - r.adv - r.ded + r.bon);
+    r.pts = pointsFor(e, from, to).pts; r.ptsMoney = r.pts * (Number(cfg.pointValue) || 0);
+    r.net = Math.max(0, r.base + r.bonus - r.lateDeduct - r.adv - r.ded + r.bon + r.ptsMoney);
     rows.push(r);
   }
   return { rows, log, period };
+}
+
+/* ======================= points ======================= */
+function dayPoints(rec) {
+  if (!rec || !rec.inAt || !rec.ss) return { p: 0, why: 'none' };
+  if (rec.manual) return { p: 0, why: 'manual' };
+  const onTime = Math.floor(rec.inAt / 6e4) <= Math.floor(rec.ss / 6e4);
+  const outOk = !!rec.outAt && (!rec.se || rec.outAt >= rec.se - (Number(cfg.earlyOut) || 0) * 6e4);
+  if (!onTime) return { p: 0, why: 'late' };
+  if (!outOk) return { p: 0, why: rec.outAt ? 'early_out' : 'no_out' };
+  return { p: hmFmt0.format(new Date(rec.inAt)) <= (cfg.mainTime || '14:30') ? 2 : 1, why: 'ok' };
+}
+function pointsFor(e, from, to) {
+  const today = dayKey(new Date()); let pts = 0, two = 0, one = 0, miss = 0, days = 0;
+  for (let d = from; d <= to && d <= today; d = addDays(d, 1)) {
+    const rec = att[e.id + '_' + d]; if (!rec) continue;
+    if (d === today && !rec.outAt) continue;          // today still running
+    if (rec.manual) continue;                          // manual days neither earn nor lose points
+    days++; const x = dayPoints(rec); pts += x.p; if (x.p === 2) two++; else if (x.p === 1) one++; else miss++;
+  }
+  return { pts, two, one, miss, days, committed: days > 0 && miss === 0, early: two >= 2 };
+}
+function badgesHtml(x) {
+  return (x.committed ? `<span class="bdg">🏅 ${esc(TR('ملتزم بالمواعيد'))}</span>` : '') + (x.early ? `<span class="bdg">🌟 ${esc(TR('حضور مبكر متكرر'))}</span>` : '');
 }
 
 /* ======================= my report ======================= */
@@ -400,6 +437,11 @@ async function renderMine() {
   show('#notesPanel', notes.length > 0);
   $('#notesList').innerHTML = notes.slice(0, 10).map(n => `<li class="${n.read_at ? '' : 'new'}"><div>${esc(n.body)}<time>${nFmt.format(new Date(n.created_at))}</time></div></li>`).join('');
   $('#mineTitle').textContent = 'تقرير ' + e.name;
+  const px = pointsFor(e, from, to);
+  const pv = Number(cfg.pointValue) || 0;
+  $('#myPts').innerHTML = `<div class="pts"><b>${px.pts}</b><div><div style="font-weight:600">${esc(TR('نقطة هذا الشهر'))}${pv ? ` = ${money(px.pts * pv)} ${esc(TR('درهم'))}` : ''}</div><span>${esc(TR('أيام نقطتين'))}: ${px.two} · ${esc(TR('أيام نقطة'))}: ${px.one}</span></div></div>
+    <div class="badges">${badgesHtml(px)}</div>
+    <ul class="ptsRules"><li>🌟 ${esc(TR('نقطتان: حضور قبل موعد العمل الرئيسي وانصراف في الموعد.'))}</li><li>👏 ${esc(TR('نقطة: حضور في موعد فرعك وانصراف في الموعد.'))}</li><li>🎁 ${pv ? esc(TR('كل نقطة تتحول إلى مال يُضاف إلى راتبك في نهاية الشهر.')) + ` (${money(pv)} ${esc(TR('درهم'))})` : esc(TR('النقاط ستتحول إلى مكافأة مالية في نهاية الشهر.'))}</li></ul>`;
   const dm = (cfg.payMode || 'deduct') === 'deduct';
   $('#mineSums').innerHTML = `<div><b>${r.present}</b><span>أيام الحضور</span></div><div><b>${r.lateN}</b><span>مرات التأخير (${r.lateMin} د)</span></div><div><b>${h2(r.hours)}</b><span>ساعات العمل</span></div>` +
     (dm ? `<div><b>${r.extraDays || 0}</b><span>أيام زيادة</span></div>` : `<div><b>${h2(r.ot)}</b><span>ساعات إضافية</span></div>`);
@@ -411,6 +453,7 @@ async function renderMine() {
      ${r.leaveDays ? `<li><span>أيام إجازة معتمدة</span><b>${r.leaveDays}</b></li>` : ''}
      ${r.lateDeduct ? `<li><span>خصم التأخير (${r.lateN} مرة، ${r.lateMin} د)</span><b>−${money(r.lateDeduct)}</b></li>` : ''}
      ${adjs.filter(a => a.employee_id === e.id && a.month === from.slice(0, 7)).map(a => `<li><span>${esc(ADJ_LBL[a.kind])}${a.note ? ' · ' + esc(a.note) : ''}</span><b>${a.kind === 'bonus' ? '+' : '−'}${money(Number(a.amount))}</b></li>`).join('')}
+     ${r.ptsMoney ? `<li><span>مكافأة النقاط (${r.pts} × ${money(Number(cfg.pointValue))})</span><b>+${money(r.ptsMoney)}</b></li>` : ''}
      <li><span><b>صافي المستحق</b></span><b>${money(r.net)}</b></li></ul>
      <p class="small muted" style="margin:10px 0 0">الحساب يكتمل بنهاية الشهر.</p>`;
   const bn = id => branchById(id)?.name || '';
@@ -670,6 +713,7 @@ async function renderReports() {
   const from = $('#rFrom').value, to = $('#rTo').value; if (from > to) return;
   if (from < loadedFrom) await ensureFrom(from);
   const { rows } = compute(from, to, bs.value);
+  renderPoints(from, to);
   const tot = rows.reduce((a, r) => ({ a: a.a + r.absent, l: a.l + r.lateN, h: a.h + r.hours, o: a.o + r.ot }), { a: 0, l: 0, h: 0, o: 0 });
   $('#sums').innerHTML = `<div><b>${tot.h.toFixed(1)}</b><span>ساعات عمل</span></div><div><b>${tot.o.toFixed(1)}</b><span>ساعات إضافية</span></div><div><b>${tot.l}</b><span>مرات تأخير</span></div><div><b>${tot.a}</b><span>أيام غياب</span></div>`;
   $('#empTable').innerHTML = `<thead><tr><th>الموظف</th><th>الفروع</th><th>حضور</th><th>غياب</th><th>تأخير</th><th>دقائق التأخير</th><th>ساعات العمل</th><th>إضافي</th><th>بدون انصراف</th></tr></thead><tbody>` +
@@ -683,16 +727,32 @@ async function renderReports() {
   $('#payNote').textContent = mode === 'deduct' ? `راتب كامل لمن يداوم ${Number(cfg.workDays) || 26} يوماً. يُخصم عن كل يوم ناقص، ويُضاف عن كل يوم زيادة.` : `يُدفع عن كل يوم حضور، مع مكافأة ${Number(cfg.bonusDays) || 0} أيام لمن يحضر ${Number(cfg.bonusAt) || 30} يوماً.`;
   const T = rows.reduce((a, r) => ({ s: a.s + r.salary, b: a.b + r.bonus, n: a.n + r.net, c: a.c + (r.bonus ? 1 : 0) }), { s: 0, b: 0, n: 0, c: 0 });
   $('#paySums').innerHTML = `<div><b>${money(T.n)}</b><span>إجمالي المستحق</span></div><div><b>${money(T.s)}</b><span>إجمالي الرواتب</span></div><div><b>${money(T.b)}</b><span>${mode === 'deduct' ? 'قيمة الأيام الزيادة' : 'المكافآت'}</span></div><div><b>${T.c}</b><span>${mode === 'deduct' ? 'داوموا أيام زيادة' : 'حصلوا على المكافأة'}</span></div>`;
-  $('#payTable').innerHTML = `<thead><tr><th>الموظف</th><th>الراتب</th><th>قيمة اليوم</th><th>أيام الحضور</th>${mode === 'deduct' ? '<th>أيام الخصم</th><th>أيام زيادة</th>' : ''}<th>${mode === 'deduct' ? 'قيمة الزيادة' : 'المكافأة'}</th><th>خصم التأخير</th><th>سلف وخصومات</th><th>مكافآت</th><th>المستحق</th></tr></thead><tbody>` +
-    (rows.length ? rows.map(r => `<tr><td>${esc(r.e.name)}</td><td class="num">${r.salary ? money(r.salary) : '<span class="muted">غير محدد</span>'}</td><td class="num">${money(r.daily)}</td><td class="num">${r.present}</td>${mode === 'deduct' ? `<td class="num">${r.deductDays}</td><td class="num">${r.extraDays}</td>` : ''}<td class="num">${r.bonus ? money(r.bonus) : '—'}</td><td class="num">${r.lateDeduct ? '−' + money(r.lateDeduct) : '—'}</td><td class="num">${r.adv + r.ded ? '−' + money(r.adv + r.ded) : '—'}</td><td class="num">${r.bon ? '+' + money(r.bon) : '—'}</td><td class="num pay">${money(r.net)}</td></tr>`).join('') : '<tr><td colspan="11" class="muted">لا يوجد موظفون.</td></tr>') + '</tbody>';
+  $('#payTable').innerHTML = `<thead><tr><th>الموظف</th><th>الراتب</th><th>قيمة اليوم</th><th>أيام الحضور</th>${mode === 'deduct' ? '<th>أيام الخصم</th><th>أيام زيادة</th>' : ''}<th>${mode === 'deduct' ? 'قيمة الزيادة' : 'المكافأة'}</th><th>خصم التأخير</th><th>سلف وخصومات</th><th>مكافآت</th><th>مكافأة النقاط</th><th>المستحق</th></tr></thead><tbody>` +
+    (rows.length ? rows.map(r => `<tr><td>${esc(r.e.name)}</td><td class="num">${r.salary ? money(r.salary) : '<span class="muted">غير محدد</span>'}</td><td class="num">${money(r.daily)}</td><td class="num">${r.present}</td>${mode === 'deduct' ? `<td class="num">${r.deductDays}</td><td class="num">${r.extraDays}</td>` : ''}<td class="num">${r.bonus ? money(r.bonus) : '—'}</td><td class="num">${r.lateDeduct ? '−' + money(r.lateDeduct) : '—'}</td><td class="num">${r.adv + r.ded ? '−' + money(r.adv + r.ded) : '—'}</td><td class="num">${r.bon ? '+' + money(r.bon) : '—'}</td><td class="num">${r.ptsMoney ? '+' + money(r.ptsMoney) + ' (' + r.pts + ')' : '—'}</td><td class="num pay">${money(r.net)}</td></tr>`).join('') : '<tr><td colspan="12" class="muted">لا يوجد موظفون.</td></tr>') + '</tbody>';
 }
+let ptsRows = [];
+function renderPoints(from, to) {
+  if (!isMgr()) return;
+  ptsRows = staff().map(e => ({ e, ...pointsFor(e, from, to) })).sort((a, b) => b.pts - a.pts || b.two - a.two || a.miss - b.miss);
+  $('#ptsNote').textContent = TR('نقطتان لمن يحضر قبل موعد العمل الرئيسي وينصرف في الموعد، ونقطة لمن يحضر في موعد فرعه وينصرف في الموعد.');
+  $('#ptsTable').innerHTML = `<thead><tr><th>#</th><th>الموظف</th><th>النقاط</th><th>أيام نقطتين</th><th>أيام نقطة</th><th>أيام بدون نقاط</th><th>التميّز</th></tr></thead><tbody>` +
+    (ptsRows.length ? ptsRows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${esc(r.e.name)}</td><td class="num pay">${r.pts}</td><td class="num">${r.two}</td><td class="num">${r.one}</td><td class="num">${r.miss}</td><td>${badgesHtml(r) || '—'}</td></tr>`).join('') : '<tr><td colspan="7" class="muted">لا يوجد موظفون.</td></tr>') + '</tbody>';
+}
+$('#ptsNotify').onclick = async () => {
+  const out = $('#ptsMsg'), list = ptsRows.filter(r => r.pts > 0);
+  if (!list.length) return msg(out, 'info', 'لا يوجد موظفون لديهم نقاط في هذه الفترة.');
+  if (!confirm(`إرسال تشجيع إلى ${list.length} موظف؟`)) return;
+  let n = 0;
+  for (const r of list) { try { await call('att_mgr_notify', { p_emp: r.e.id, p_body: `🌟 أحسنت يا ${r.e.name.split(/\s+/)[0]}! جمعت ${r.pts} نقطة تميّز حتى الآن بالتزامك بمواعيد الحضور والانصراف. استمرارك على ذلك سيتم مكافأتك عليه في نهاية الشهر. Well done! You have ${r.pts} excellence points so far for keeping to your clock-in and clock-out times. Keep it up — you will be rewarded at the end of the month.` }); n++; } catch (e) {} }
+  msg(out, 'ok', `تم إرسال التشجيع إلى ${n} موظف.`);
+};
 $('#exportBtn').onclick = async () => {
   const out = $('#exportMsg'), from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
   if (typeof XLSX === 'undefined') return msg(out, 'err', 'مكتبة Excel لم تُحمّل بعد. انتظر لحظة وحاول مرة أخرى.');
   if (from < loadedFrom) await ensureFrom(from);
   const { rows, log } = compute(from, to, bid), bn = id => branchById(id)?.name || '', dm = (cfg.payMode || 'deduct') === 'deduct';
   const pr = rows.map(r => { const o = { 'الموظف': r.e.name, 'البريد': r.e.email || '', 'الفروع': bnames(r.e), 'الراتب الشهري': r.salary, 'قيمة اليوم': +r.daily.toFixed(2), 'أيام الحضور': r.present };
-    if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['أيام إجازة معتمدة'] = r.leaveDays; o['خصم التأخير'] = +r.lateDeduct.toFixed(2); o['سلف'] = r.adv; o['خصومات'] = r.ded; o['مكافآت'] = r.bon; o['صافي المستحق'] = +r.net.toFixed(2); return o; });
+    if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['أيام إجازة معتمدة'] = r.leaveDays; o['خصم التأخير'] = +r.lateDeduct.toFixed(2); o['سلف'] = r.adv; o['خصومات'] = r.ded; o['مكافآت'] = r.bon; o['النقاط'] = r.pts; o['مكافأة النقاط'] = +r.ptsMoney.toFixed(2); o['صافي المستحق'] = +r.net.toFixed(2); return o; });
   const sum = rows.map(r => ({ 'الموظف': r.e.name, 'الفروع': bnames(r.e), 'أيام الحضور': r.present, 'أيام الغياب': r.absent, 'مرات التأخير': r.lateN, 'دقائق التأخير': r.lateMin, 'ساعات العمل': +h2(r.hours), 'ساعات إضافية': +h2(r.ot), 'أيام بدون انصراف': r.noOut }));
   const det = log.sort((a, b) => a.d < b.d ? -1 : 1).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
   const tk = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
@@ -700,6 +760,8 @@ $('#exportBtn').onclick = async () => {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pr)), TR('الرواتب'));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(sum)), TR('الملخص'));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(det)), TR('السجل اليومي'));
+  const pp = staff().map(e => ({ e, ...pointsFor(e, from, to) })).sort((a, b) => b.pts - a.pts).map((r, i) => ({ '#': i + 1, 'الموظف': r.e.name, 'النقاط': r.pts, 'أيام نقطتين': r.two, 'أيام نقطة': r.one, 'أيام بدون نقاط': r.miss, 'ملتزم بالمواعيد': r.committed ? '✔' : '', 'حضور مبكر متكرر': r.early ? '✔' : '' }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pp)), TR('النقاط'));
   XLSX.writeFile(wb, `RQ-attendance_${from}_${to}.xlsx`);
   msg(out, 'ok', 'تم تصدير الملف.');
 };
@@ -708,7 +770,7 @@ $('#exportBtn').onclick = async () => {
 let draft = null, payDraft = {};
 function startDraft() {
   draft = { settings: { grace: cfg.grace, openLead: cfg.openLead, payMode: cfg.payMode, workDays: cfg.workDays, bonusAt: cfg.bonusAt, bonusDays: cfg.bonusDays, requireApproval: cfg.requireApproval,
-      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift },
+      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift, earlyOut: cfg.earlyOut, mainTime: cfg.mainTime, pointValue: cfg.pointValue },
     branches: JSON.parse(JSON.stringify(cfg.branches)), employees: JSON.parse(JSON.stringify(staff().filter(e => e.status === 'active'))) };
   payDraft = Object.assign({}, pay);
 }
@@ -718,7 +780,7 @@ function renderSettings() {
   if (!draft) startDraft();
   const S = draft.settings;
   $('#sGrace').value = S.grace; $('#sLead').value = S.openLead; $('#sApprove').checked = !!S.requireApproval;
-  $('#sLateMode').value = S.lateMode || 'none'; $('#sLateN').value = S.lateN; $('#sLateDays').value = S.lateDays; $('#sDayHours').value = S.dayHours; $('#sMinShift').value = S.minShift;
+  $('#sLateMode').value = S.lateMode || 'none'; $('#sLateN').value = S.lateN; $('#sLateDays').value = S.lateDays; $('#sDayHours').value = S.dayHours; $('#sMinShift').value = S.minShift; $('#sEarlyOut').value = S.earlyOut; $('#sMainTime').value = S.mainTime || '14:30'; $('#sPointValue').value = S.pointValue || 0;
   toggleLate(S.lateMode || 'none');
   $('#sMode').value = S.payMode; $('#sBonusAt').value = S.bonusAt; $('#sBonusDays').value = S.bonusDays; $('#sWork').value = S.workDays; toggleMode(S.payMode);
   // pending registrations
@@ -790,6 +852,9 @@ $('#sLateN').oninput = e => draft && (draft.settings.lateN = Math.max(1, Number(
 $('#sLateDays').oninput = e => draft && (draft.settings.lateDays = Math.max(0, Number(e.target.value) || 0));
 $('#sDayHours').oninput = e => draft && (draft.settings.dayHours = Math.max(1, Number(e.target.value) || 10));
 $('#sMinShift').oninput = e => draft && (draft.settings.minShift = Math.max(0, Number(e.target.value) || 0));
+$('#sEarlyOut').oninput = e => draft && (draft.settings.earlyOut = Math.max(0, Number(e.target.value) || 0));
+$('#sMainTime').onchange = e => draft && e.target.value && (draft.settings.mainTime = e.target.value);
+$('#sPointValue').oninput = e => draft && (draft.settings.pointValue = Math.max(0, Number(e.target.value) || 0));
 $('#sWork').oninput = e => draft && (draft.settings.workDays = Number(e.target.value) || 26);
 $('#addBranch').onclick = () => { draft.branches.push({ id: 'new-' + Date.now(), name: 'فرع جديد', lat: null, lng: null, radius: 10, start: '14:00', end: '00:30', sort: draft.branches.length + 1 }); renderSettings(); };
 async function setStatus(id, status) {
@@ -804,7 +869,7 @@ $('#saveCfg').onclick = async () => {
   try {
     const S = draft.settings;
     await call('att_mgr_settings', { p: { grace_min: S.grace, open_lead_min: S.openLead, pay_mode: S.payMode, work_days: S.workDays, bonus_at: S.bonusAt, bonus_days: S.bonusDays, require_approval: S.requireApproval,
-      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift } });
+      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift, early_out_min: S.earlyOut, main_time: S.mainTime, point_value: S.pointValue } });
     const keepIds = draft.branches.map(b => b.id);
     for (const [i, b] of draft.branches.entries()) {
       const row = { name: b.name.trim() || 'فرع', lat: b.lat, lng: b.lng, radius_m: Math.max(5, Number(b.radius) || 10), start_time: b.start || '14:00', end_time: b.end || '00:30', sort: i + 1 };

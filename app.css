@@ -41,3 +41,11 @@ body.noscroll{overflow:hidden}
 .lv .who b{display:block}
 .lv .acts{display:flex;gap:6px}
 .sumLate li{font-size:14px}
+
+.pts{display:flex;align-items:center;gap:14px;background:var(--roast);color:var(--on-roast);border-radius:var(--r-md);padding:14px 16px}
+.pts b{font-family:"Rubik",sans-serif;font-size:34px;line-height:1;color:var(--gold)}
+.pts span{font-size:14px;color:var(--on-roast-muted)}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.bdg{display:inline-flex;align-items:center;gap:4px;font-size:13px;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--ink);font-weight:600}
+.ptsRules{margin:12px 0 0;padding:0;list-style:none;font-size:13.5px;color:var(--muted)}
+.ptsRules li{padding:3px 0}
