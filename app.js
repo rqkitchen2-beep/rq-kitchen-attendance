@@ -276,7 +276,7 @@ function renderPunch() {
   if (picked && !avail.some(b => b.id === picked)) picked = null;
   const tb = branchById(picked), offToday = isOff(e, t) && !open, done = !open && rec && rec.outAt;
   $('#tName').textContent = e.name;
-  $('#tMeta').textContent = offToday ? 'اليوم إجازة حسب الجدول' : tb ? `دوام ${tb.name} ${fmtT(shiftOf(e, open ? open.day : t, tb.id).s)} – ${fmtT(shiftOf(e, open ? open.day : t, tb.id).e)}` : avail.length ? 'اختر الفرع الذي تداوم فيه الآن' : '';
+  $('#tMeta').textContent = offToday ? 'اليوم إجازة حسب الجدول' : tb ? tb.name : avail.length ? 'اختر الفرع الذي تداوم فيه الآن' : '';
   const closed = !open && !done && (offToday || !avail.length);
   show('#pickWrap', !closed && !done);
   $('#branchPick').innerHTML = avail.map(b => { const sh = shiftOf(e, t, b.id);
