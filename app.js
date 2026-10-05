@@ -91,7 +91,7 @@ function applyData(d, merge) {
   const st = d.settings || {};
   Object.assign(cfg, { grace: st.grace_min, openLead: st.open_lead_min, payMode: st.pay_mode, workDays: st.work_days,
     bonusAt: st.bonus_at, bonusDays: st.bonus_days, requireApproval: st.require_approval,
-    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0, earlyOut: st.early_out_min == null ? 15 : Number(st.early_out_min), mainTime: hm5(st.main_time) || '14:30', pointValue: Number(st.point_value) || 0 });
+    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0, earlyOut: st.early_out_min == null ? 15 : Number(st.early_out_min), mainTime: hm5(st.main_time) || '14:30', pointValue: Number(st.point_value) || 0, starUntil: hm5(st.star_in_until) || '15:00' });
   cfg.branches = (d.branches || []).map(mapBranch);
   cfg.employees = isMgr() ? (d.employees || []).map(mapEmp) : [me];
   pay = {}; (d.salaries || []).forEach(r => pay[r.employee_id] = Number(r.monthly));
@@ -346,11 +346,11 @@ $('#punchBtn').onclick = async () => {
   }
   await reloadRecent(); renderPunch();
   if (data.action === 'out') msg(out, 'ok', `تم تسجيل انصرافك الساعة ${fmtT(Date.parse(data.at))} في ${data.branch}.`);
-  else if (data.late_min > (cfg.grace || 0)) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
+  else if (hmFmt0.format(new Date(Date.parse(data.at))) > (cfg.starUntil || '15:00')) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
   else {
     const first = (me.name || '').trim().split(/\s+/)[0], early = hmFmt0.format(new Date(Date.parse(data.at))) <= (cfg.mainTime || '14:30');
-    msg(out, 'ok', early ? `🌟 ممتاز يا ${first}! حضرت قبل موعد العمل الرئيسي. انصرف في الموعد لتحصل على نقطتين تميّز اليوم.`
-      : `👏 أحسنت يا ${first}! حضرت في الموعد. انصرف في الموعد لتحصل على نقطة تميّز اليوم.`);
+    msg(out, 'ok', early ? `🌟 ممتاز يا ${first}! حضرت مبكراً اليوم. التزم بموعد الانصراف لتحصل على نقطتين وتظهر في نجوم الالتزام.`
+      : `👏 أحسنت يا ${first}! حضرت في الموعد. التزم بموعد الانصراف لتحصل على نقطة وتظهر في نجوم الالتزام.`);
   }
   if (navigator.vibrate) navigator.vibrate(60);
 };
@@ -370,6 +370,8 @@ function compute(from, to, branchId) {
         r.present++;
         const lm = Math.round((rec.inAt - sh.s) / 6e4), isLate = lm > grace;
         if (isLate) { r.lateN++; r.lateMin += lm; }
+        const realLate = Math.round((rec.inAt - at(d, cfg.starUntil || '15:00')) / 6e4);
+        if (realLate > 0) { r.dedN = (r.dedN || 0) + 1; r.dedMin = (r.dedMin || 0) + realLate; }
         let w = 0, o = 0;
         if (rec.outAt) { w = (rec.outAt - rec.inAt) / 36e5; o = w - sh.hours; o = o >= 0.25 ? o : 0; r.hours += w; r.ot += o; }
         else if (!(d >= addDays(today, -1) && now - rec.inAt < 20 * 36e5)) r.noOut++;
@@ -394,8 +396,8 @@ function compute(from, to, branchId) {
       r.base = Math.max(0, sal - r.deductDays * daily);
     } else { r.deductDays = null; r.extraDays = 0; r.base = r.present * daily; }
     const lm = cfg.lateMode || 'none';
-    r.lateDeduct = lm === 'count' ? Math.floor(r.lateN / (Number(cfg.lateN) || 3)) * (Number(cfg.lateDays) || 0) * daily
-      : lm === 'minute' ? r.lateMin * daily / ((Number(cfg.dayHours) || 10) * 60) : 0;
+    r.lateDeduct = lm === 'count' ? Math.floor((r.dedN || 0) / (Number(cfg.lateN) || 3)) * (Number(cfg.lateDays) || 0) * daily
+      : lm === 'minute' ? (r.dedMin || 0) * daily / ((Number(cfg.dayHours) || 10) * 60) : 0;
     const mon = from.slice(0, 7), mine = adjs.filter(a => a.employee_id === e.id && a.month === mon);
     r.adv = mine.filter(a => a.kind === 'advance').reduce((s, a) => s + Number(a.amount), 0);
     r.ded = mine.filter(a => a.kind === 'deduction').reduce((s, a) => s + Number(a.amount), 0);
@@ -411,7 +413,8 @@ function compute(from, to, branchId) {
 function dayPoints(rec) {
   if (!rec || !rec.inAt || !rec.ss) return { p: 0, why: 'none' };
   if (rec.manual) return { p: 0, why: 'manual' };
-  const onTime = Math.floor(rec.inAt / 6e4) <= Math.floor(rec.ss / 6e4);
+  const inHM = hmFmt0.format(new Date(rec.inAt));
+  const onTime = inHM <= (cfg.starUntil || '15:00');
   const outOk = !!rec.outAt && (!rec.se || rec.outAt >= rec.se - (Number(cfg.earlyOut) || 0) * 6e4);
   if (!onTime) return { p: 0, why: 'late' };
   if (!outOk) return { p: 0, why: rec.outAt ? 'early_out' : 'no_out' };
@@ -468,7 +471,7 @@ async function renderMine() {
      <ul class="list">${dm ? `<li><span>أيام الدوام المطلوبة للراتب الكامل</span><b>${Number(cfg.workDays) || 26}</b></li><li><span>أيام الخصم</span><b>${r.deductDays}</b></li><li><span>أيام زيادة</span><b>${r.extraDays || 0}</b></li>` : ''}
      <li><span>الأساسي المستحق</span><b>${money(r.base)}</b></li>
      ${r.leaveDays ? `<li><span>أيام إجازة معتمدة</span><b>${r.leaveDays}</b></li>` : ''}
-     ${r.lateDeduct ? `<li><span>خصم التأخير (${r.lateN} مرة، ${r.lateMin} د)</span><b>−${money(r.lateDeduct)}</b></li>` : ''}
+     ${r.lateDeduct ? `<li><span>خصم التأخير (${r.dedN || 0} مرة، ${r.dedMin || 0} د)</span><b>−${money(r.lateDeduct)}</b></li>` : ''}
      ${adjs.filter(a => a.employee_id === e.id && a.month === from.slice(0, 7)).map(a => `<li><span>${esc(ADJ_LBL[a.kind])}${a.note ? ' · ' + esc(a.note) : ''}</span><b>${a.kind === 'bonus' ? '+' : '−'}${money(Number(a.amount))}</b></li>`).join('')}
      ${r.ptsMoney ? `<li><span>مكافأة النقاط (${r.pts} × ${money(Number(cfg.pointValue))})</span><b>+${money(r.ptsMoney)}</b></li>` : ''}
      <li><span><b>صافي المستحق</b></span><b>${money(r.net)}</b></li></ul>
@@ -751,7 +754,7 @@ let ptsRows = [];
 function renderPoints(from, to) {
   if (!isMgr()) return;
   ptsRows = staff().map(e => ({ e, ...pointsFor(e, from, to) })).sort((a, b) => b.pts - a.pts || b.two - a.two || a.miss - b.miss);
-  $('#ptsNote').textContent = TR('نقطتان لمن يحضر قبل موعد العمل الرئيسي وينصرف في الموعد، ونقطة لمن يحضر في موعد فرعه وينصرف في الموعد.');
+  $('#ptsNote').textContent = TR('نقطتان لمن يحضر حتى موعد العمل الرئيسي، ونقطة لمن يحضر حتى آخر موعد للنقاط، بشرط ألا ينصرف قبل آخر 15 دقيقة من الدوام.');
   $('#ptsTable').innerHTML = `<thead><tr><th>#</th><th>الموظف</th><th>النقاط</th><th>أيام نقطتين</th><th>أيام نقطة</th><th>أيام بدون نقاط</th><th>التميّز</th></tr></thead><tbody>` +
     (ptsRows.length ? ptsRows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${esc(r.e.name)}</td><td class="num pay">${r.pts}</td><td class="num">${r.two}</td><td class="num">${r.one}</td><td class="num">${r.miss}</td><td>${badgesHtml(r) || '—'}</td></tr>`).join('') : '<tr><td colspan="7" class="muted">لا يوجد موظفون.</td></tr>') + '</tbody>';
 }
@@ -787,7 +790,7 @@ $('#exportBtn').onclick = async () => {
 let draft = null, payDraft = {};
 function startDraft() {
   draft = { settings: { grace: cfg.grace, openLead: cfg.openLead, payMode: cfg.payMode, workDays: cfg.workDays, bonusAt: cfg.bonusAt, bonusDays: cfg.bonusDays, requireApproval: cfg.requireApproval,
-      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift, earlyOut: cfg.earlyOut, mainTime: cfg.mainTime, pointValue: cfg.pointValue },
+      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift, earlyOut: cfg.earlyOut, mainTime: cfg.mainTime, pointValue: cfg.pointValue, starUntil: cfg.starUntil },
     branches: JSON.parse(JSON.stringify(cfg.branches)), employees: JSON.parse(JSON.stringify(staff().filter(e => e.status === 'active'))) };
   payDraft = Object.assign({}, pay);
 }
@@ -797,7 +800,7 @@ function renderSettings() {
   if (!draft) startDraft();
   const S = draft.settings;
   $('#sGrace').value = S.grace; $('#sLead').value = S.openLead; $('#sApprove').checked = !!S.requireApproval;
-  $('#sLateMode').value = S.lateMode || 'none'; $('#sLateN').value = S.lateN; $('#sLateDays').value = S.lateDays; $('#sDayHours').value = S.dayHours; $('#sMinShift').value = S.minShift; $('#sEarlyOut').value = S.earlyOut; $('#sMainTime').value = S.mainTime || '14:30'; $('#sPointValue').value = S.pointValue || 0;
+  $('#sLateMode').value = S.lateMode || 'none'; $('#sLateN').value = S.lateN; $('#sLateDays').value = S.lateDays; $('#sDayHours').value = S.dayHours; $('#sMinShift').value = S.minShift; $('#sEarlyOut').value = S.earlyOut; $('#sMainTime').value = S.mainTime || '14:30'; $('#sPointValue').value = S.pointValue || 0; $('#sStarUntil').value = S.starUntil || '15:00';
   toggleLate(S.lateMode || 'none');
   $('#sMode').value = S.payMode; $('#sBonusAt').value = S.bonusAt; $('#sBonusDays').value = S.bonusDays; $('#sWork').value = S.workDays; toggleMode(S.payMode);
   // pending registrations
@@ -872,6 +875,7 @@ $('#sMinShift').oninput = e => draft && (draft.settings.minShift = Math.max(0, N
 $('#sEarlyOut').oninput = e => draft && (draft.settings.earlyOut = Math.max(0, Number(e.target.value) || 0));
 $('#sMainTime').onchange = e => draft && e.target.value && (draft.settings.mainTime = e.target.value);
 $('#sPointValue').oninput = e => draft && (draft.settings.pointValue = Math.max(0, Number(e.target.value) || 0));
+$('#sStarUntil').onchange = e => draft && e.target.value && (draft.settings.starUntil = e.target.value);
 $('#sWork').oninput = e => draft && (draft.settings.workDays = Number(e.target.value) || 26);
 $('#addBranch').onclick = () => { draft.branches.push({ id: 'new-' + Date.now(), name: 'فرع جديد', lat: null, lng: null, radius: 10, start: '14:00', end: '00:30', sort: draft.branches.length + 1 }); renderSettings(); };
 async function setStatus(id, status) {
@@ -886,7 +890,7 @@ $('#saveCfg').onclick = async () => {
   try {
     const S = draft.settings;
     await call('att_mgr_settings', { p: { grace_min: S.grace, open_lead_min: S.openLead, pay_mode: S.payMode, work_days: S.workDays, bonus_at: S.bonusAt, bonus_days: S.bonusDays, require_approval: S.requireApproval,
-      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift, early_out_min: S.earlyOut, main_time: S.mainTime, point_value: S.pointValue } });
+      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift, early_out_min: S.earlyOut, main_time: S.mainTime, point_value: S.pointValue, star_in_until: S.starUntil } });
     const keepIds = draft.branches.map(b => b.id);
     for (const [i, b] of draft.branches.entries()) {
       const row = { name: b.name.trim() || 'فرع', lat: b.lat, lng: b.lng, radius_m: Math.max(5, Number(b.radius) || 10), start_time: b.start || '14:00', end_time: b.end || '00:30', sort: i + 1 };
