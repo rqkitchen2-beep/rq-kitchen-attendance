@@ -101,9 +101,19 @@ function applyData(d, merge) {
   notes = d.notifications || [];
   leaves = d.leaves || []; adjs = d.adjustments || [];
 }
+let stars = [];
 async function loadAll() {
   if (!loadedFrom) loadedFrom = monthStart(dayKey(new Date()), 1);
   applyData(await call('att_data', { p_from: loadedFrom }));
+  try { stars = me && me.status === 'active' ? (await call('att_stars')) || [] : []; } catch (e) { stars = []; }
+}
+function renderStars() {
+  const box = $('#starsBox'); if (!box) return;
+  const show2 = me && me.status === 'active' && stars.length > 0 && curTab === 'punch';
+  box.classList.toggle('hidden', !show2); if (!show2) return;
+  const medals = ['🥇', '🥈', '🥉', '⭐', '⭐'];
+  box.innerHTML = `<h3>🏆 ${esc(TR('نجوم الالتزام هذا الشهر'))}</h3><ol>${stars.map((s, i) => `<li class="${me && s.id === me.id ? 'me' : ''}"><span class="md">${medals[i] || '⭐'}</span><span class="nm">${esc(s.name)}</span><span class="pt">${s.points} ${esc(TR('نقطة'))}</span></li>`).join('')}</ol>
+    <p>${esc(TR('التزم بمواعيد الحضور والانصراف لتظهر هنا وتحصل على مكافأة نهاية الشهر.'))}</p>`;
 }
 async function reloadRecent() { await loadAll(); }
 async function ensureFrom(from) {
@@ -270,7 +280,7 @@ function renderPunch() {
   const closed = !open && !done && (offToday || !avail.length);
   show('#pickWrap', !closed && !done);
   $('#branchPick').innerHTML = avail.map(b => { const sh = shiftOf(e, t, b.id);
-    return `<label><input type="radio" name="bp" value="${esc(b.id)}" ${picked === b.id ? 'checked' : ''} ${open ? 'disabled' : ''}>${esc(b.name)} <span class="small" style="opacity:.75">${fmtT(sh.s)} – ${fmtT(sh.e)}</span></label>`; }).join('');
+    return `<label><input type="radio" name="bp" value="${esc(b.id)}" ${picked === b.id ? 'checked' : ''} ${open ? 'disabled' : ''}>${esc(b.name)}</label>`; }).join('');
   $$('#branchPick input').forEach(el => el.onchange = () => { picked = el.value; msg($('#punchMsg'), '', ''); renderPunch(); });
   $('#pickLabel').textContent = open ? 'الانصراف من الفرع الذي سجلت فيه الحضور' : 'في أي فرع تداوم الآن؟';
   show('#closedNote', closed);
@@ -285,10 +295,17 @@ function renderPunch() {
   $('#tStamp').innerHTML = rec ? `<div><span class="small muted">الحضور</span><b>${fmtT(rec.inAt)}</b></div><div><span class="small muted">الانصراف</span><b>${fmtT(rec.outAt)}</b></div>` : '';
   renderBadges();
 }
+// Watch GPS for up to ~8 s and keep the most accurate fix (indoors the first fix is often poor).
 function getPos() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej({ code: 0 });
-    navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    let best = null, done = false, id = null;
+    const finish = () => { if (done) return; done = true; if (id != null) navigator.geolocation.clearWatch(id); clearTimeout(t1); best ? res(best) : rej({ code: 3 }); };
+    const t1 = setTimeout(finish, 8000);
+    id = navigator.geolocation.watchPosition(p => {
+      if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+      if (best.coords.accuracy <= 15) finish();
+    }, err => { if (!best) { done = true; clearTimeout(t1); if (id != null) navigator.geolocation.clearWatch(id); rej(err); } }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   });
 }
 const earlyMsg = () => '⚠️ لا يمكن تسجيل الانصراف الآن، لم ينتهِ موعد الدوام بعد. الخروج قبل الموعد سيتم خصمه، ويجب الالتزام بالموعد مثل باقي فريق العمل.';
@@ -985,7 +1002,7 @@ $('#mapSave').onclick = () => {
 
 /* ======================= render all ======================= */
 function renderAll() {
-  applyRole(); renderBadges();
+  applyRole(); renderBadges(); renderStars();
   if (!me || me.status !== 'active') return;
   renderPunch();
   if (isEmp() && curTab === 'mine') { renderMine(); renderLeavesMine(); }

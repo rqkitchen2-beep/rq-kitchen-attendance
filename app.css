@@ -49,3 +49,13 @@ body.noscroll{overflow:hidden}
 .bdg{display:inline-flex;align-items:center;gap:4px;font-size:13px;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--ink);font-weight:600}
 .ptsRules{margin:12px 0 0;padding:0;list-style:none;font-size:13.5px;color:var(--muted)}
 .ptsRules li{padding:3px 0}
+
+.stars{background:linear-gradient(135deg,var(--roast),var(--roast-2));color:var(--on-roast);border-radius:var(--r-lg);padding:16px 18px;margin-bottom:14px}
+.stars h3{font-family:"Rubik",sans-serif;margin:0 0 10px;font-size:17px;color:var(--gold)}
+.stars ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.stars li{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border-radius:12px;padding:9px 12px}
+.stars li .md{font-size:20px;width:26px;text-align:center}
+.stars li .nm{flex:1;font-weight:600}
+.stars li .pt{font-family:"Rubik",sans-serif;font-weight:700;color:var(--gold)}
+.stars li.me{outline:2px solid var(--gold)}
+.stars p{margin:10px 0 0;font-size:13px;color:var(--on-roast-muted)}
