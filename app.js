@@ -412,6 +412,7 @@ function compute(from, to, branchId) {
 }
 
 /* ======================= manager home: who is in today ======================= */
+const durHM = ms => { const m = Math.max(0, Math.floor(ms / 6e4)); return `${Math.floor(m / 60)}:${pad(m % 60)}`; };
 function renderMgrHome() {
   if (!isMgr()) return;
   const sd = dayKey(new Date(Date.now() - 6 * 36e5)), m0 = sd.slice(0, 8) + '01';   // shift day (runs past midnight)
@@ -423,10 +424,11 @@ function renderMgrHome() {
   const inNow = list.filter(x => x.rec && !x.rec.outAt).length, left = list.filter(x => x.rec && x.rec.outAt).length, notIn = list.filter(x => !x.rec && !x.off).length;
   $('#mhDay').textContent = `${DAYS[dow(sd)]} ${sd.slice(8)}/${sd.slice(5, 7)}`;
   $('#mhSums').innerHTML = `<div><b>${inNow}</b><span>داخل الدوام</span></div><div><b>${left}</b><span>انصرفوا</span></div><div><b>${notIn}</b><span>لم يسجّلوا</span></div><div><b>${list.filter(x => x.off && !x.rec).length}</b><span>إجازة</span></div>`;
-  $('#mhTable').innerHTML = `<thead><tr><th>الموظف</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>أيام الدوام هذا الشهر</th></tr></thead><tbody>` +
+  $('#mhTable').innerHTML = `<thead><tr><th>الموظف</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>ساعات اليوم</th><th>أيام الدوام هذا الشهر</th></tr></thead><tbody>` +
     list.map(x => `<tr><td>${esc(x.e.name)}</td><td>${x.rec ? esc(branchById(x.rec.branchId)?.name || '') : '—'}</td>
       <td class="num">${x.rec ? fmtT(x.rec.inAt) : x.off ? '<span class="tag">إجازة</span>' : '<span class="tag abs">لم يسجّل</span>'}</td>
       <td class="num">${x.rec ? (x.rec.outAt ? fmtT(x.rec.outAt) : '<span class="tag in">داخل الدوام</span>') : '—'}</td>
+      <td class="num">${x.rec ? durHM((x.rec.outAt || Date.now()) - x.rec.inAt) + (x.rec.outAt ? '' : ' ⏳') : '—'}</td>
       <td class="num">${x.days}</td></tr>`).join('') + '</tbody>';
 }
 
