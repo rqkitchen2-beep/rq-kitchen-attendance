@@ -208,7 +208,7 @@ async function afterAuth() {
       $('#pdText').textContent = `أهلاً ${me.name}. أرسلنا بياناتك للمدير، وبمجرد اعتماد حسابك يفتح لك تسجيل الحضور هنا تلقائياً.`;
       applyRole(); return;
     }
-    showTab(isMgr() ? 'today' : 'punch');
+    showTab('punch');
     renderAll();
   } finally { authing = false; }
 }
@@ -267,7 +267,7 @@ function nextOpening(e, now) {
 /* ======================= punch screen ======================= */
 function renderPunch() {
   if (!token || !me || me.status !== 'active') return;
-  if (isMgr()) { onlyBox('#mgrHome'); return; }
+  if (isMgr()) { onlyBox('#mgrHome'); renderMgrHome(); return; }
   onlyBox('#ticket');
   const e = me, t = dayKey(new Date()), now = Date.now(), btn = $('#punchBtn');
   const open = openRecord(e.id), rec = open || att[e.id + '_' + t];
@@ -320,9 +320,8 @@ $('#punchBtn').onclick = async () => {
   if (!open && !picked) return msg(out, 'err', 'اختر الفرع الذي تداوم فيه.');
   if (open) {
     const minMs = (Number(cfg.minShift) || 0) * 6e4, left = open.inAt + minMs - Date.now();
-    if (left > 0) return msg(out, 'err', `لا يمكن تسجيل الانصراف قبل مرور ${cfg.minShift} دقيقة على الحضور. انتظر ${Math.ceil(left / 6e4)} دقيقة.`);
-    const eo = Number(cfg.earlyOut) || 0;
-    if (eo > 0 && open.se && Date.now() < open.se - eo * 6e4) return msg(out, 'err', earlyMsg(open.se - eo * 6e4));
+    void left;
+    // early clock-out is checked by the server (so every attempt is logged)
     if (!confirm('هل تريد تسجيل الانصراف الآن؟')) return;
   }
   busy = true; btn.disabled = true; msg(out, 'info', 'جاري تحديد موقعك…');
@@ -407,6 +406,25 @@ function compute(from, to, branchId) {
     rows.push(r);
   }
   return { rows, log, period };
+}
+
+/* ======================= manager home: who is in today ======================= */
+function renderMgrHome() {
+  if (!isMgr()) return;
+  const sd = dayKey(new Date(Date.now() - 6 * 36e5)), m0 = sd.slice(0, 8) + '01';   // shift day (runs past midnight)
+  const list = staff().map(e => {
+    const rec = att[e.id + '_' + sd];
+    let days = 0; for (let d = m0; d <= sd; d = addDays(d, 1)) if (att[e.id + '_' + d]) days++;
+    return { e, rec, days, off: isOff(e, sd) };
+  }).sort((a, b) => (a.rec ? 0 : 1) - (b.rec ? 0 : 1) || (a.rec && b.rec ? a.rec.inAt - b.rec.inAt : 0) || a.e.name.localeCompare(b.e.name));
+  const inNow = list.filter(x => x.rec && !x.rec.outAt).length, left = list.filter(x => x.rec && x.rec.outAt).length, notIn = list.filter(x => !x.rec && !x.off).length;
+  $('#mhDay').textContent = `${DAYS[dow(sd)]} ${sd.slice(8)}/${sd.slice(5, 7)}`;
+  $('#mhSums').innerHTML = `<div><b>${inNow}</b><span>داخل الدوام</span></div><div><b>${left}</b><span>انصرفوا</span></div><div><b>${notIn}</b><span>لم يسجّلوا</span></div><div><b>${list.filter(x => x.off && !x.rec).length}</b><span>إجازة</span></div>`;
+  $('#mhTable').innerHTML = `<thead><tr><th>الموظف</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>أيام الدوام هذا الشهر</th></tr></thead><tbody>` +
+    list.map(x => `<tr><td>${esc(x.e.name)}</td><td>${x.rec ? esc(branchById(x.rec.branchId)?.name || '') : '—'}</td>
+      <td class="num">${x.rec ? fmtT(x.rec.inAt) : x.off ? '<span class="tag">إجازة</span>' : '<span class="tag abs">لم يسجّل</span>'}</td>
+      <td class="num">${x.rec ? (x.rec.outAt ? fmtT(x.rec.outAt) : '<span class="tag in">داخل الدوام</span>') : '—'}</td>
+      <td class="num">${x.days}</td></tr>`).join('') + '</tbody>';
 }
 
 /* ======================= points ======================= */
@@ -671,7 +689,8 @@ function renderManual() {
     $('#mrBranch').innerHTML = cfg.branches.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
     if (ce && list.some(e => e.id === ce)) $('#mrEmp').value = ce;
     if (cb && branchById(cb)) $('#mrBranch').value = cb;
-    if (!$('#mrDay').value) $('#mrDay').value = dayKey(new Date());
+    // the shift runs past midnight: until 6 AM the "current" work day is still yesterday
+    if (!$('#mrDay').value) $('#mrDay').value = dayKey(new Date(Date.now() - 6 * 36e5));
     $('#mrDay').max = dayKey(new Date());
     mrFill();
   }
