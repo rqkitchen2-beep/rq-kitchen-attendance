@@ -101,7 +101,8 @@ function applyData(d, merge) {
   notes = d.notifications || [];
   leaves = d.leaves || []; adjs = d.adjustments || [];
 }
-let stars = [];
+let stars = [], salawatShown = false, salawatIds = new Set();
+document.addEventListener('click', e => { if (e.target.closest('#salawatGo')) show('#salawat', false); });
 async function loadAll() {
   if (!loadedFrom) loadedFrom = monthStart(dayKey(new Date()), 1);
   applyData(await call('att_data', { p_from: loadedFrom }));
@@ -210,6 +211,8 @@ async function afterAuth() {
     }
     showTab('punch');
     renderAll();
+    try { const f = await call('att_flags'); salawatIds = new Set(f.salawat_ids || []);
+      if (f.salawat && !salawatShown) { salawatShown = true; show('#salawat', true); } } catch (e) {}
   } finally { authing = false; }
 }
 
@@ -857,7 +860,7 @@ function renderSettings() {
     <p class="small muted" style="margin:8px 0 0" dir="ltr">${esc(e.email || '')}</p>
     <div style="margin-top:10px"><label>فروعه الأساسية للتقارير (يستطيع التسجيل من أي فرع)</label><div class="checks">${draft.branches.filter(b => !String(b.id).startsWith('new-')).map(b => `<label><input type="checkbox" data-eb="${i}" value="${esc(b.id)}" ${e.branchIds.includes(b.id) ? 'checked' : ''}>${esc(b.name)}</label>`).join('')}</div></div>
     <div class="row" style="margin-top:10px"><div><label>يوم الإجازة الأسبوعي</label><select data-e="${i}" data-k="off">${offOpts}</select></div>
-    <div style="display:flex;align-items:flex-end;gap:6px">${e.devicePending ? `<button class="btn mustard" data-dev="${esc(e.id)}">موافقة على جوال جديد</button>` : e.hasDevice ? `<button class="btn alt" data-devreset="${esc(e.id)}">فك ربط الجوال</button>` : ''}<button class="btn alt" data-pin="${esc(e.id)}">رقم سري جديد</button><button class="btn danger" data-stop="${esc(e.id)}">إيقاف</button></div></div></div>`).join('')
+    <div style="display:flex;align-items:flex-end;gap:6px"><label class="small" style="display:inline-flex;align-items:center;gap:6px;margin:0 0 0 8px"><input type="checkbox" data-sal2="${esc(e.id)}" ${salawatIds.has(e.id) ? 'checked' : ''} style="width:auto">${esc(TR('لافتة الصلاة على النبي'))}</label>${e.devicePending ? `<button class="btn mustard" data-dev="${esc(e.id)}">موافقة على جوال جديد</button>` : e.hasDevice ? `<button class="btn alt" data-devreset="${esc(e.id)}">فك ربط الجوال</button>` : ''}<button class="btn alt" data-pin="${esc(e.id)}">رقم سري جديد</button><button class="btn danger" data-stop="${esc(e.id)}">إيقاف</button></div></div></div>`).join('')
     : '<p class="muted small">لا يوجد موظفون معتمدون بعد. أرسل رابط التطبيق للموظفين ليسجلوا حساباتهم.</p>';
   draft.employees.forEach((e, i) => { const el = $(`select[data-e="${i}"][data-k="off"]`); if (el) el.value = String(e.off ?? -1); });
   $$('[data-e]').forEach(el => el.onchange = el.oninput = () => { const k = el.dataset.k; draft.employees[el.dataset.e][k] = k === 'off' ? Number(el.value) : el.value; });
@@ -870,6 +873,9 @@ function renderSettings() {
     try { const r = await call('att_mgr_reset_pin', { p_id: el.dataset.pin, p_pin: p.trim() }); msg($('#saveMsg'), r.ok ? 'ok' : 'err', r.ok ? 'تم تعيين الرقم السري الجديد. أعطه للموظف.' : ACC_ERR.pin); }
     catch (x) { msg($('#saveMsg'), 'err', 'لم يتم التنفيذ. حاول مرة أخرى.'); }
   });
+  $$('[data-sal2]').forEach(el => el.onchange = async () => {
+    try { await call('att_mgr_salawat', { p_id: el.dataset.sal2, p_on: el.checked }); el.checked ? salawatIds.add(el.dataset.sal2) : salawatIds.delete(el.dataset.sal2); }
+    catch (x) { el.checked = !el.checked; msg($('#saveMsg'), 'err', 'لم يتم التنفيذ. حاول مرة أخرى.'); } });
   $$('[data-dev]').forEach(el => el.onclick = async () => {
     try { await call('att_mgr_employee', { p_id: el.dataset.dev, p: { device: 'approve' } }); draft = null; await loadAll(); renderAll(); msg($('#saveMsg'), 'ok', 'تمت الموافقة على الجوال الجديد، ووصل للموظف تنبيه.'); }
     catch (x) { msg($('#saveMsg'), 'err', 'لم يتم التنفيذ. حاول مرة أخرى.'); } });

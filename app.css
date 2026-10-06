@@ -59,3 +59,11 @@ body.noscroll{overflow:hidden}
 .stars li .pt{font-family:"Rubik",sans-serif;font-weight:700;color:var(--gold)}
 .stars li.me{outline:2px solid var(--gold)}
 .stars p{margin:10px 0 0;font-size:13px;color:var(--on-roast-muted)}
+
+.salawat{position:fixed;inset:0;z-index:60;background:rgba(12,11,10,.82);display:flex;align-items:center;justify-content:center;padding:24px;
+  padding-top:calc(24px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.salawatCard{background:var(--roast);color:var(--on-roast);border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);border-radius:26px;
+  padding:34px 26px 26px;max-width:420px;width:100%;text-align:center;box-shadow:0 30px 80px -30px rgba(0,0,0,.6)}
+.salawatOrn{font-size:44px;color:var(--gold);line-height:1;margin-bottom:18px}
+.salawatTxt{font-family:"IBM Plex Sans Arabic",sans-serif;font-size:26px;line-height:1.7;font-weight:600;margin:0 0 24px}
+.salawatCard .btn{width:100%;font-size:17px;padding:14px}
