@@ -52,7 +52,13 @@ let me = null;              // me = own att_employees row (mapped)
 let cfg = { branches: [], employees: [], grace: 10, openLead: 30, payMode: 'deduct', workDays: 26, bonusAt: 30, bonusDays: 4, requireApproval: true };
 let att = {}, sched = {}, pay = {}, notes = [];
 let loadedFrom = null, curTab = 'punch', picked = null, busy = false, leaves = [], adjs = [];
-let DEVICE = null; try { DEVICE = localStorage.getItem('rq_dev'); if (!DEVICE) { DEVICE = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2)); localStorage.setItem('rq_dev', DEVICE); } } catch (e) { DEVICE = null; }
+let DEVICE = null;
+{ const ck = () => { try { const m = document.cookie.match(/(?:^|; )rq_dev=([^;]+)/); return m ? decodeURIComponent(m[1]) : null; } catch (e) { return null; } };
+  try { DEVICE = localStorage.getItem('rq_dev'); } catch (e) {}
+  if (!DEVICE) DEVICE = ck();
+  if (!DEVICE) DEVICE = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+  try { localStorage.setItem('rq_dev', DEVICE); } catch (e) {}
+  try { document.cookie = 'rq_dev=' + encodeURIComponent(DEVICE) + '; max-age=315360000; path=/; samesite=lax; secure'; } catch (e) {} }
 const isMgr = () => me && me.role === 'manager' && me.status === 'active';
 const isEmp = () => me && me.role === 'employee' && me.status === 'active';
 const staff = () => cfg.employees.filter(e => e.role === 'employee' && e.status === 'active');
@@ -79,7 +85,7 @@ const mapEmp = r => ({ id: r.id, name: r.name, email: r.email, role: r.role, sta
 const mapRec = r => ({ id: r.id, empId: r.employee_id, branchId: r.branch_id, day: r.day,
   inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null,
   ss: r.shift_start ? Date.parse(r.shift_start) : null, se: r.shift_end ? Date.parse(r.shift_end) : null,
-  inDist: r.in_dist, outDist: r.out_dist, manual: !!r.manual });
+  inDist: r.in_dist, outDist: r.out_dist, manual: !!r.manual, autoOut: !!r.auto_out });
 function putSched(r) {
   (sched[r.day] = sched[r.day] || { o: {} }).o[r.employee_id] = r.is_off ? { off: true } : { start: hm5(r.start_time), end: hm5(r.end_time) };
 }
@@ -105,6 +111,7 @@ let stars = [], salawatShown = false, salawatIds = new Set();
 document.addEventListener('click', e => { if (e.target.closest('#salawatGo')) show('#salawat', false); });
 async function loadAll() {
   if (!loadedFrom) loadedFrom = monthStart(dayKey(new Date()), 1);
+  try { await call('att_sync'); } catch (e) {}
   applyData(await call('att_data', { p_from: loadedFrom }));
   try { stars = me && me.status === 'active' ? (await call('att_stars')) || [] : []; } catch (e) { stars = []; }
 }
@@ -248,7 +255,7 @@ function shiftOf(e, day, branchId) {
 const leadMs = () => (Number(cfg.openLead) || 0) * 6e4;
 function openRecord(empId) {
   const t = dayKey(new Date()), y = addDays(t, -1);
-  for (const d of [t, y]) { const r = att[empId + '_' + d]; if (r && r.inAt && !r.outAt && Date.now() - r.inAt < 20 * 36e5) return r; }
+  for (const d of [t, y]) { const r = att[empId + '_' + d]; if (r && r.inAt && !r.outAt && Date.now() - r.inAt < 20 * 36e5 && (!r.se || Date.now() < r.se + 5 * 36e5)) return r; }
   return null;
 }
 function openBranches(e, now) {
@@ -348,7 +355,7 @@ $('#punchBtn').onclick = async () => {
   }
   await reloadRecent(); renderPunch();
   if (data.action === 'out') msg(out, 'ok', `تم تسجيل انصرافك الساعة ${fmtT(Date.parse(data.at))} في ${data.branch}.`);
-  else if (hmFmt0.format(new Date(Date.parse(data.at))) > (cfg.starUntil || '15:00')) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
+  else if (data.late_min > 0 && hmFmt0.format(new Date(Date.parse(data.at))) > (cfg.starUntil || '15:00')) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
   else {
     const first = (me.name || '').trim().split(/\s+/)[0], early = hmFmt0.format(new Date(Date.parse(data.at))) <= (cfg.mainTime || '14:30');
     msg(out, 'ok', early ? `🌟 ممتاز يا ${first}! حضرت مبكراً اليوم. التزم بموعد الانصراف لتحصل على نقطتين وتظهر في نجوم الالتزام.`
@@ -372,7 +379,7 @@ function compute(from, to, branchId) {
         r.present++;
         const lm = Math.round((rec.inAt - sh.s) / 6e4), isLate = lm > grace;
         if (isLate) { r.lateN++; r.lateMin += lm; }
-        const realLate = Math.round((rec.inAt - at(d, cfg.starUntil || '15:00')) / 6e4);
+        const realLate = Math.round((rec.inAt - Math.max(at(d, cfg.starUntil || '15:00'), rec.ss || 0)) / 6e4);
         if (realLate > 0) { r.dedN = (r.dedN || 0) + 1; r.dedMin = (r.dedMin || 0) + realLate; }
         let w = 0, o = 0;
         if (rec.outAt) { w = (rec.outAt - rec.inAt) / 36e5; o = w - sh.hours; o = o >= 0.25 ? o : 0; r.hours += w; r.ot += o; }
@@ -427,7 +434,7 @@ function renderMgrHome() {
   $('#mhTable').innerHTML = `<thead><tr><th>الموظف</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>ساعات اليوم</th><th>أيام الدوام هذا الشهر</th></tr></thead><tbody>` +
     list.map(x => `<tr><td>${esc(x.e.name)}</td><td>${x.rec ? esc(branchById(x.rec.branchId)?.name || '') : '—'}</td>
       <td class="num">${x.rec ? fmtT(x.rec.inAt) : x.off ? '<span class="tag">إجازة</span>' : '<span class="tag abs">لم يسجّل</span>'}</td>
-      <td class="num">${x.rec ? (x.rec.outAt ? fmtT(x.rec.outAt) : '<span class="tag in">داخل الدوام</span>') : '—'}</td>
+      <td class="num">${x.rec ? (x.rec.outAt ? fmtT(x.rec.outAt) + (x.rec.autoOut ? ' <span class="tag late">تلقائي</span>' : '') : '<span class="tag in">داخل الدوام</span>') : '—'}</td>
       <td class="num">${x.rec ? durHM((x.rec.outAt || Date.now()) - x.rec.inAt) + (x.rec.outAt ? '' : ' ⏳') : '—'}</td>
       <td class="num">${x.days}</td></tr>`).join('') + '</tbody>';
 }
@@ -436,6 +443,7 @@ function renderMgrHome() {
 function dayPoints(rec) {
   if (!rec || !rec.inAt || !rec.ss) return { p: 0, why: 'none' };
   if (rec.manual) return { p: 0, why: 'manual' };
+  if (rec.autoOut) return { p: 0, why: 'no_out' };
   const inHM = hmFmt0.format(new Date(rec.inAt));
   const onTime = inHM <= (cfg.starUntil || '15:00');
   const outOk = !!rec.outAt && (!rec.se || rec.outAt >= rec.se - (Number(cfg.earlyOut) || 0) * 6e4);
@@ -502,7 +510,7 @@ async function renderMine() {
   const bn = id => branchById(id)?.name || '';
   $('#mineTable').innerHTML = `<thead><tr><th>التاريخ</th><th>الفرع</th><th>الحضور</th><th>الانصراف</th><th>الحالة</th><th>الساعات</th></tr></thead><tbody>` +
     (mine.length ? mine.map(x => { const st = x.state === 'غائب' ? '<span class="tag abs">غائب</span>' : x.state === 'متأخر' ? `<span class="tag late">متأخر ${x.lm} د</span>` : '<span class="tag in">حاضر</span>';
-      return `<tr><td>${DAYS[dow(x.d)]} ${x.d.slice(5)}</td><td>${esc(x.rec ? bn(x.rec.branchId) : '—')}</td><td class="num">${x.rec ? fmtT(x.rec.inAt) : '—'}</td><td class="num">${x.rec ? fmtT(x.rec.outAt) : '—'}</td><td>${st}${x.rec && x.rec.manual ? ' <span class="tag">يدوي</span>' : ''}</td><td class="num">${x.w ? h2(x.w) : '—'}</td></tr>`; }).join('')
+      return `<tr><td>${DAYS[dow(x.d)]} ${x.d.slice(5)}</td><td>${esc(x.rec ? bn(x.rec.branchId) : '—')}</td><td class="num">${x.rec ? fmtT(x.rec.inAt) : '—'}</td><td class="num">${x.rec ? fmtT(x.rec.outAt) : '—'}</td><td>${st}${x.rec && x.rec.manual ? ' <span class="tag">يدوي</span>' : ''}${x.rec && x.rec.autoOut ? ' <span class="tag late">انصراف تلقائي</span>' : ''}</td><td class="num">${x.w ? h2(x.w) : '—'}</td></tr>`; }).join('')
       : '<tr><td colspan="6" class="muted">لا توجد أيام مسجلة في هذا الشهر.</td></tr>') + '</tbody>';
   renderBadges();
 }
