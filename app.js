@@ -223,24 +223,100 @@ async function afterAuth() {
   } finally { authing = false; }
 }
 
+/* ======================= side drawer ======================= */
+const IC = {
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+  today: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15h3"/>',
+  req: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3M9 10h6M9 14h6M9 18h3"/>',
+  mega: '<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16 9a3 3 0 0 1 0 6M19 6a7 7 0 0 1 0 12"/>',
+  cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17V11M13 17V7M18 17v-4"/>',
+  money: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+  star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/>',
+  minus: '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  branch: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7M18 8.5c0 5-6 4-10.5 8"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  doc: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
+  plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M16 7l3 3M18 5l2 2"/>'
+};
+function drawerItems() {
+  const B = id => { const el = $(id); return el && !el.classList.contains('hidden') ? +el.textContent || 0 : 0; };
+  if (isMgr()) return [
+    ['punch', 'mgrHome', 'home', 'الرئيسية'],
+    ['today', 'sumPanel', 'today', 'ملخص اليوم'],
+    ['today', 'leavePanel', 'req', 'الطلبات', B('#todayBadge')],
+    ['today', 'secBroadcast', 'mega', 'إعلان للموظفين'],
+    ['sched', 'secSched', 'cal', 'جدول الدوام'],
+    ['sched', 'secManual', 'pen', 'تسجيل حضور يدوي'],
+    ['reports', 'secReports', 'chart', 'التقارير'],
+    ['reports', 'secPay', 'money', 'الرواتب'],
+    ['reports', 'secStars', 'star', 'لوحة التميّز'],
+    ['reports', 'secAdj', 'minus', 'سلف وخصومات ومكافآت'],
+    ['settings', 'secEmployees', 'users', 'الموظفون', B('#setBadge')],
+    ['settings', 'secBranches', 'branch', 'الفروع'],
+    ['settings', 'secGeneral', 'gear', 'الإعدادات']
+  ];
+  return [
+    ['punch', null, 'clock', 'تسجيل الحضور'],
+    ['mine', 'notesPanel', 'bell', 'التنبيهات', B('#navBadge')],
+    ['mine', null, 'doc', 'تقريري'],
+    ['mine', 'secSalary', 'money', 'تفاصيل راتبك'],
+    ['mine', 'ptsPanel', 'star', 'نقاط التميّز'],
+    ['mine', 'secLeaveReq', 'plane', 'طلب إجازة'],
+    ['mine', 'secDays', 'list', 'سجل الأيام'],
+    ['mine', 'secPin', 'key', 'تغيير الرقم السري']
+  ];
+}
+let drawerOpen = false, curSec = null;
+function renderDrawer() {
+  if (!me) return;
+  $('#drName').textContent = me.name || '';
+  $('#drRole').textContent = isMgr() ? 'المدير · RQ Kitchen' : 'موظف · RQ Kitchen';
+  $('#drList').innerHTML = drawerItems().map(([t, sec, ic, label, n], i) =>
+    `<button type="button" class="dr-item${t === curTab && (sec || null) === curSec ? ' on' : ''}" data-i="${i}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${IC[ic]}</svg><span>${esc(label)}</span>${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('');
+  $$('#drList .dr-item').forEach(b => b.onclick = () => { const it = drawerItems()[+b.dataset.i]; goSec(it[0], it[1]); });
+}
+function openDrawer() { renderDrawer(); const d = $('#drawer'); d.classList.remove('hidden'); d.setAttribute('aria-hidden', 'false'); drawerOpen = true; requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('open'))); }
+function closeDrawer() { const d = $('#drawer'); if (!d || !drawerOpen) return; drawerOpen = false; d.classList.remove('open'); d.setAttribute('aria-hidden', 'true'); setTimeout(() => { if (!drawerOpen) d.classList.add('hidden'); }, 260); }
+function goSec(t, sec) {
+  closeDrawer(); showTab(t); curSec = sec || null; renderAll();
+  if (t === 'mine') setTimeout(markRead, 1500);
+  setTimeout(() => { const el = sec && document.getElementById(sec); if (el && !el.classList.contains('hidden') && el.offsetParent) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); else window.scrollTo(0, 0); }, 60);
+}
+$('#menuBtn').onclick = openDrawer; $('#moreBtn').onclick = openDrawer;
+$('#drBack').onclick = closeDrawer; $('#drClose').onclick = closeDrawer;
+$('#drLang').onclick = () => { $('#langBtn').click(); setTimeout(renderDrawer, 50); };
+$('#drTheme').onclick = () => $('#themeBtn').click();
+$('#drOut').onclick = () => { closeDrawer(); signOut(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
 /* ======================= tabs & roles ======================= */
 const ALL_TABS = ['punch', 'mine', 'today', 'sched', 'reports', 'settings'];
 function allowedTabs() { return isMgr() ? ['punch', 'today', 'sched', 'reports', 'settings'] : isEmp() ? ['punch', 'mine'] : ['punch']; }
 function showTab(t) {
   if (!allowedTabs().includes(t)) t = 'punch';
-  curTab = t;
-  $$('nav.tabs button').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === t));
+  curTab = t; curSec = null;
+  $$('nav.tabs button[data-tab]').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === t));
   ALL_TABS.forEach(x => show('#tab-' + x, x === t));
   document.body.classList.toggle('compact', t !== 'punch');
 }
 function applyRole() {
   const al = allowedTabs();
-  $$('nav.tabs button').forEach(x => x.classList.toggle('hidden', !al.includes(x.dataset.tab)));
-  show('nav.tabs', al.length > 1);
+  const bar = isMgr() ? ['punch', 'today', 'reports', 'settings'] : al;
+  $$('nav.tabs button[data-tab]').forEach(x => x.classList.toggle('hidden', !bar.includes(x.dataset.tab)));
+  show('nav.tabs', al.length > 1); show('#menuBtn', al.length > 1);
+  document.body.classList.toggle('has-nav', al.length > 1);
+  if (al.length <= 1) closeDrawer();
   show('#signOutTop', isMgr());
   if (!al.includes(curTab)) showTab('punch');
 }
-$$('nav.tabs button').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo(0, 0); renderAll(); if (b.dataset.tab === 'mine') setTimeout(markRead, 1500); });
+$$('nav.tabs button[data-tab]').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo(0, 0); renderAll(); if (b.dataset.tab === 'mine') setTimeout(markRead, 1500); });
 $('#bellBtn').onclick = () => { showTab('mine'); window.scrollTo(0, 0); renderAll(); setTimeout(markRead, 1500); };
 
 /* ======================= shifts ======================= */
@@ -341,7 +417,15 @@ $('#punchBtn').onclick = async () => {
   const { latitude, longitude, accuracy } = pos.coords;
   msg(out, 'info', 'جاري التسجيل…');
   let data = null;
-  try { data = await call('att_punch', { p_branch: open ? open.branchId : picked, p_lat: latitude, p_lng: longitude, p_acc: accuracy, p_device: DEVICE }); } catch (e) {}
+  const args = { p_branch: open ? open.branchId : picked, p_lat: latitude, p_lng: longitude, p_acc: accuracy, p_device: DEVICE, p_ack: false };
+  try { data = await call('att_punch2', args); } catch (e) {}
+  if (data && !data.ok && data.error === 'ack_needed') {
+    const days = (data.days || []).join('، ');
+    const ok = confirm(`إقرار — Acknowledgement\n\nأقرّ بأنني غادرت العمل قبل الموعد ولم أسجّل انصرافي يوم ${days}، وأن انصرافي سُجّل تلقائياً الساعة 12:00 بدون نقاط، وأتعهد بتسجيل الانصراف دائماً قبل مغادرة الفرع.\n\nI acknowledge that I left work before the end of my shift without clocking out on ${days}, that my clock-out was recorded automatically at 12:00 with no points, and I commit to always clock out before leaving the branch.\n\nاضغط «موافق» للإقرار وتسجيل حضورك.`);
+    if (!ok) { busy = false; renderPunch(); return msg(out, 'err', 'لا يمكن تسجيل الحضور قبل الموافقة على الإقرار.'); }
+    msg(out, 'info', 'جاري التسجيل…'); data = null;
+    try { data = await call('att_punch2', { ...args, p_ack: true }); } catch (e) {}
+  }
   busy = false;
   if (!data) { renderPunch(); return msg(out, 'err', 'لم يتم التسجيل. تحقق من الاتصال وحاول مرة أخرى.'); }
   if (!data.ok) {
@@ -475,6 +559,8 @@ function renderBadges() {
   $('#setBadge').textContent = nn; show('#setBadge', !!nn);
   const nl = isMgr() ? leaves.filter(l => l.status === 'pending').length : 0;
   $('#todayBadge').textContent = nl; show('#todayBadge', !!nl);
+  const tot = n + nn + nl; $('#moreBadge').textContent = tot; show('#moreBadge', !!tot);
+  if (drawerOpen) renderDrawer();
 }
 async function markRead() { if (!isEmp() || !unread()) return; try { await call('att_mark_read'); notes.forEach(n => n.read_at = n.read_at || new Date().toISOString()); renderBadges(); } catch (e) {} }
 async function renderMine() {

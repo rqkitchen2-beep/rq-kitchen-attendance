@@ -67,3 +67,45 @@ body.noscroll{overflow:hidden}
 .salawatOrn{font-size:44px;color:var(--gold);line-height:1;margin-bottom:18px}
 .salawatTxt{font-family:"IBM Plex Sans Arabic",sans-serif;font-size:26px;line-height:1.7;font-weight:600;margin:0 0 24px}
 .salawatCard .btn{width:100%;font-size:17px;padding:14px}
+
+/* ---- Floating bottom bar + side drawer ---- */
+nav.tabs{position:fixed!important;top:auto!important;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));
+  max-width:560px;margin:0 auto;z-index:30;border:1px solid var(--line)!important;border-radius:28px;
+  background:color-mix(in srgb,var(--surface) 90%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  box-shadow:0 14px 34px -12px rgba(0,0,0,.35);padding-bottom:0!important}
+nav.tabs .tabs-in{justify-content:space-around;padding:6px!important;gap:2px!important;overflow:visible!important;max-width:none}
+nav.tabs button{flex:1 1 0;min-width:0!important;flex-direction:column;gap:3px!important;font-size:11.5px!important;padding:7px 2px!important;
+  border-radius:20px!important;position:relative;background:transparent!important;color:var(--muted)}
+nav.tabs button svg{width:23px!important;height:23px!important}
+nav.tabs button[aria-selected="true"]{color:var(--ink)!important;background:var(--chip)!important}
+nav.tabs button[aria-selected="true"] svg{color:var(--gold)!important}
+nav.tabs button .badge{position:absolute!important;top:0;inset-inline-end:calc(50% - 22px)}
+nav.tabs button span:not(.badge){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.has-nav .wrap{padding-bottom:120px}
+.drawer{position:fixed;inset:0;z-index:60}
+.dr-back{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .2s}
+.dr-panel{position:absolute;top:0;bottom:0;inset-inline-start:0;width:min(330px,84vw);background:var(--roast);color:var(--on-roast);
+  display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 0 40px rgba(0,0,0,.4)}
+[dir="ltr"] .dr-panel{transform:translateX(-100%)}
+.drawer.open .dr-back{opacity:1}.drawer.open .dr-panel{transform:none}
+.dr-head{display:flex;align-items:center;gap:12px;padding:18px 18px 16px;border-bottom:1px solid var(--roast-2)}
+.dr-logo{width:58px;height:52px;flex:none}
+.dr-who{display:flex;flex-direction:column;min-width:0;flex:1}
+.dr-who b{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dr-who span{font-size:13px;color:var(--on-roast-muted)}
+.dr-x{border:0;background:var(--roast-2);color:var(--on-roast);width:34px;height:34px;border-radius:50%;cursor:pointer;flex:none}
+.dr-cap{font-size:12.5px;color:var(--on-roast-muted);padding:16px 22px 6px}
+.dr-list{flex:1;overflow-y:auto;padding:0 10px}
+.dr-item{display:flex;align-items:center;gap:14px;width:100%;border:0;background:transparent;color:var(--on-roast);
+  padding:11px 12px;border-radius:14px;font-size:15.5px;cursor:pointer;text-align:start;font-family:inherit}
+.dr-item svg{width:22px;height:22px;flex:none;color:var(--on-roast-muted)}
+.dr-item span:first-of-type{flex:1}
+.dr-item.on{background:var(--roast-2)}.dr-item.on svg{color:var(--gold)}
+.dr-item:active{background:var(--roast-2)}
+.dr-item.sub{padding:9px 12px 9px 12px;padding-inline-start:48px;font-size:14.5px;color:var(--on-roast-muted)}
+.dr-item .badge{background:var(--out);color:#fff}
+.dr-foot{border-top:1px solid var(--roast-2);padding:10px}
+.dr-out,.dr-out svg{color:#F0866F!important}
+#menuBtn svg{display:block}
+.panel[id^="sec"]{scroll-margin-top:16px}
