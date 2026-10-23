@@ -85,7 +85,7 @@ const mapEmp = r => ({ id: r.id, name: r.name, email: r.email, role: r.role, sta
 const mapRec = r => ({ id: r.id, empId: r.employee_id, branchId: r.branch_id, day: r.day,
   inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null,
   ss: r.shift_start ? Date.parse(r.shift_start) : null, se: r.shift_end ? Date.parse(r.shift_end) : null,
-  inDist: r.in_dist, outDist: r.out_dist, manual: !!r.manual, autoOut: !!r.auto_out });
+  inDist: r.in_dist, outDist: r.out_dist, manual: !!r.manual, autoOut: !!r.auto_out, ptsSrv: r.pts == null ? null : Number(r.pts), ptsWhy: r.pts_why || null });
 function putSched(r) {
   (sched[r.day] = sched[r.day] || { o: {} }).o[r.employee_id] = r.is_off ? { off: true } : { start: hm5(r.start_time), end: hm5(r.end_time) };
 }
@@ -526,6 +526,7 @@ function renderMgrHome() {
 /* ======================= points ======================= */
 function dayPoints(rec) {
   if (!rec || !rec.inAt || !rec.ss) return { p: 0, why: 'none' };
+  if (rec.ptsSrv != null && (rec.outAt || rec.autoOut || rec.manual)) return { p: rec.ptsSrv, why: rec.ptsWhy || 'ok' };   // points from real times (server)
   if (rec.manual) return { p: 0, why: 'manual' };
   if (rec.autoOut) return { p: 0, why: 'no_out' };
   const inHM = hmFmt0.format(new Date(rec.inAt));
