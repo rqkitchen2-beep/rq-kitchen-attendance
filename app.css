@@ -109,3 +109,20 @@ body.has-nav .wrap{padding-bottom:120px}
 .dr-out,.dr-out svg{color:#F0866F!important}
 #menuBtn svg{display:block}
 .panel[id^="sec"]{scroll-margin-top:16px}
+
+/* ---- print / PDF ---- */
+.print-head{display:none}
+@media print{
+  body.printing{background:#fff!important;color:#000!important}
+  body.printing *{visibility:hidden}
+  body.printing .print-target,body.printing .print-target *{visibility:visible}
+  body.printing .print-target{position:absolute;inset:0 0 auto 0;border:0;box-shadow:none;padding:0;background:#fff;color:#000}
+  body.printing .print-target .noprint{display:none}
+  body.printing .print-head{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 12px;font-size:16px;border-bottom:2px solid #F18E25;padding-bottom:8px}
+  body.printing .scroll{overflow:visible!important;max-height:none!important}
+  body.printing table{font-size:10.5px;width:100%;border-collapse:collapse}
+  body.printing th,body.printing td{border:1px solid #ccc;padding:4px 5px;color:#000!important;background:#fff!important}
+  body.printing nav.tabs,body.printing .drawer,body.printing header{display:none!important}
+  body.printing .sums>div,body.printing .sums>div *{background:#f4f4f4!important;color:#000!important}
+  @page{size:A4 landscape;margin:10mm}
+}

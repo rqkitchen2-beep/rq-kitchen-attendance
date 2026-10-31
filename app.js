@@ -885,25 +885,64 @@ $('#ptsNotify').onclick = async () => {
   for (const r of list) { try { await call('att_mgr_notify', { p_emp: r.e.id, p_body: `🌟 أحسنت يا ${r.e.name.split(/\s+/)[0]}! جمعت ${r.pts} نقطة تميّز حتى الآن بالتزامك بمواعيد الحضور والانصراف. استمرارك على ذلك سيتم مكافأتك عليه في نهاية الشهر. Well done! You have ${r.pts} excellence points so far for keeping to your clock-in and clock-out times. Keep it up — you will be rewarded at the end of the month.` }); n++; } catch (e) {} }
   msg(out, 'ok', `تم إرسال التشجيع إلى ${n} موظف.`);
 };
-$('#exportBtn').onclick = async () => {
-  const out = $('#exportMsg'), from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
-  if (typeof XLSX === 'undefined') return msg(out, 'err', 'مكتبة Excel لم تُحمّل بعد. انتظر لحظة وحاول مرة أخرى.');
+async function buildSheets(out) {
+  const from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
+  if (typeof XLSX === 'undefined') { msg(out, 'err', 'مكتبة Excel لم تُحمّل بعد. انتظر لحظة وحاول مرة أخرى.'); return null; }
   if (from < loadedFrom) await ensureFrom(from);
   const { rows, log } = compute(from, to, bid), bn = id => branchById(id)?.name || '', dm = (cfg.payMode || 'deduct') === 'deduct';
   const pr = rows.map(r => { const o = { 'الموظف': r.e.name, 'البريد': r.e.email || '', 'الفروع': bnames(r.e), 'الراتب الشهري': r.salary, 'قيمة اليوم': +r.daily.toFixed(2), 'أيام الحضور': r.present };
     if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['أيام إجازة معتمدة'] = r.leaveDays; o['خصم التأخير'] = +r.lateDeduct.toFixed(2); o['سلف'] = r.adv; o['خصومات'] = r.ded; o['مكافآت'] = r.bon; o['النقاط'] = r.pts; o['مكافأة النقاط'] = +r.ptsMoney.toFixed(2); o['صافي المستحق'] = +r.net.toFixed(2); return o; });
+  if (pr.length) { const t = { 'الموظف': TR('الإجمالي') }; ['الراتب الشهري', 'الأساسي المستحق', 'قيمة الأيام الزيادة', 'مكافأة الحضور الكامل', 'خصم التأخير', 'سلف', 'خصومات', 'مكافآت', 'النقاط', 'مكافأة النقاط', 'صافي المستحق'].forEach(k => { if (k in pr[0]) t[k] = +pr.reduce((a, o) => a + (Number(o[k]) || 0), 0).toFixed(2); }); pr.push(t); }
   const sum = rows.map(r => ({ 'الموظف': r.e.name, 'الفروع': bnames(r.e), 'أيام الحضور': r.present, 'أيام الغياب': r.absent, 'مرات التأخير': r.lateN, 'دقائق التأخير': r.lateMin, 'ساعات العمل': +h2(r.hours), 'ساعات إضافية': +h2(r.ot), 'أيام بدون انصراف': r.noOut }));
-  const det = log.sort((a, b) => a.d < b.d ? -1 : 1).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
-  const tk = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
-  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: !EN }] };
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pr)), TR('الرواتب'));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(sum)), TR('الملخص'));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(det)), TR('السجل اليومي'));
+  const det = log.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.e.name.localeCompare(b.e.name)).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
   const pp = staff().map(e => ({ e, ...pointsFor(e, from, to) })).sort((a, b) => b.pts - a.pts).map((r, i) => ({ '#': i + 1, 'الموظف': r.e.name, 'النقاط': r.pts, 'أيام نقطتين': r.two, 'أيام نقطة': r.one, 'أيام بدون نقاط': r.miss, 'ملتزم بالمواعيد': r.committed ? '✔' : '', 'حضور مبكر متكرر': r.early ? '✔' : '' }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pp)), TR('النقاط'));
-  XLSX.writeFile(wb, `RQ-attendance_${from}_${to}.xlsx`);
+  return { from, to, pr, sum, det, pp };
+}
+const tkRows = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
+function addSheet(wb, rows, name) {
+  const ws = XLSX.utils.json_to_sheet(tkRows(rows));
+  const keys = rows.length ? Object.keys(tkRows([rows[0]])[0]) : [];
+  ws['!cols'] = keys.map(k => ({ wch: Math.min(40, Math.max(String(k).length, ...rows.map(o => String(Object.values(o)[keys.indexOf(k)] ?? '').length)) + 2) }));
+  XLSX.utils.book_append_sheet(wb, ws, TR(name));
+}
+async function saveWb(wb, name, out) {
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  let file = null; try { file = new File([buf], name, { type }); } catch (e) {}
+  if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    try { await navigator.share({ files: [file], title: name }); msg(out, 'ok', 'تم تجهيز الملف.'); return; }
+    catch (e) { if (e && e.name === 'AbortError') return msg(out, 'info', 'تم الإلغاء.'); }
+  }
+  const url = URL.createObjectURL(new Blob([buf], { type })), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
   msg(out, 'ok', 'تم تصدير الملف.');
+}
+const newWb = () => { const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: !EN }] }; return wb; };
+$('#exportBtn').onclick = async () => {
+  const out = $('#exportMsg'), x = await buildSheets(out); if (!x) return;
+  const wb = newWb(); addSheet(wb, x.pr, 'الرواتب'); addSheet(wb, x.sum, 'الملخص'); addSheet(wb, x.det, 'السجل اليومي'); addSheet(wb, x.pp, 'النقاط');
+  saveWb(wb, `RQ-attendance_${x.from}_${x.to}.xlsx`, out);
 };
+$('#payXls').onclick = async () => {
+  const out = $('#payExpMsg'), x = await buildSheets(out); if (!x) return;
+  const wb = newWb(); addSheet(wb, x.pr, 'الرواتب'); addSheet(wb, x.pp, 'النقاط');
+  saveWb(wb, `RQ-payroll_${x.from}_${x.to}.xlsx`, out);
+};
+$('#attXls').onclick = async () => {
+  const out = $('#attExpMsg'), x = await buildSheets(out); if (!x) return;
+  const wb = newWb(); addSheet(wb, x.sum, 'الملخص'); addSheet(wb, x.det, 'السجل اليومي');
+  saveWb(wb, `RQ-attendance-log_${x.from}_${x.to}.xlsx`, out);
+};
+function printPanel(id, title) {
+  const p = document.getElementById(id), from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
+  const hd = document.createElement('div'); hd.className = 'print-head';
+  hd.innerHTML = `<b>RQ Kitchen — ${esc(TR(title))}</b><span>${esc(from)} → ${esc(to)}${bid ? ' · ' + esc(branchById(bid)?.name || '') : ''}</span>`;
+  p.prepend(hd); p.classList.add('print-target'); document.body.classList.add('printing');
+  const done = () => { hd.remove(); p.classList.remove('print-target'); document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done); setTimeout(() => window.print(), 50); setTimeout(done, 60000);
+}
+$('#payPdf').onclick = () => printPanel('secPay', 'الرواتب');
+$('#attPdf').onclick = () => printPanel('secEmpSum', 'ملخص الحضور');
 
 /* ======================= manager: settings ======================= */
 let draft = null, payDraft = {};
