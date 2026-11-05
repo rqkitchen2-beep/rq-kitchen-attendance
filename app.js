@@ -80,7 +80,7 @@ tick();
 setInterval(() => { tick(); if (isEmp() && !busy) renderPunch(); }, 15000);
 
 /* ======================= mapping ======================= */
-const mapBranch = r => ({ id: r.id, name: r.name, lat: r.lat, lng: r.lng, radius: r.radius_m, start: hm5(r.start_time), end: hm5(r.end_time), sort: r.sort });
+const mapBranch = r => ({ id: r.id, name: r.name, lat: r.lat, lng: r.lng, radius: r.radius_m, start: hm5(r.start_time), end: hm5(r.end_time), sort: r.sort, lateAfter: hm5(r.late_after) || '', lateAfterFrom: r.late_after_from || '' });
 const mapEmp = r => ({ id: r.id, name: r.name, email: r.email, role: r.role, status: r.status, branchIds: r.branch_ids || [], off: r.weekly_off, createdAt: r.created_at, hasDevice: !!r.has_device, devicePending: !!r.device_pending });
 const mapRec = r => ({ id: r.id, empId: r.employee_id, branchId: r.branch_id, day: r.day,
   inAt: Date.parse(r.in_at), outAt: r.out_at ? Date.parse(r.out_at) : null,
@@ -439,7 +439,7 @@ $('#punchBtn').onclick = async () => {
   }
   await reloadRecent(); renderPunch();
   if (data.action === 'out') msg(out, 'ok', `تم تسجيل انصرافك الساعة ${fmtT(Date.parse(data.at))} في ${data.branch}.`);
-  else if (data.late_min > 0 && hmFmt0.format(new Date(Date.parse(data.at))) > (cfg.starUntil || '15:00')) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
+  else if (data.late_min > 0 && hmFmt0.format(new Date(Date.parse(data.at))) > cutHM(dayKey(new Date(Date.parse(data.at) - 6 * 36e5)), ((cfg.branches || []).find(b => b.name === data.branch) || {}).id)) msg(out, 'ok', `تم تسجيل حضورك في ${data.branch} الساعة ${fmtT(Date.parse(data.at))} (متأخر ${data.late_min} دقيقة).`);
   else {
     const first = (me.name || '').trim().split(/\s+/)[0], early = hmFmt0.format(new Date(Date.parse(data.at))) <= (cfg.mainTime || '14:30');
     msg(out, 'ok', early ? `🌟 ممتاز يا ${first}! حضرت مبكراً اليوم. التزم بموعد الانصراف لتحصل على نقطتين وتظهر في نجوم الالتزام.`
@@ -463,7 +463,7 @@ function compute(from, to, branchId) {
         r.present++;
         const lm = Math.round((rec.inAt - sh.s) / 6e4), isLate = lm > grace;
         if (isLate) { r.lateN++; r.lateMin += lm; }
-        const realLate = Math.round((rec.inAt - Math.max(at(d, cfg.starUntil || '15:00'), rec.ss || 0)) / 6e4);
+        const realLate = Math.round((rec.inAt - Math.max(at(d, cutHM(d, rec.branchId)), rec.ss || 0)) / 6e4);
         if (realLate > 0 && !rec.manual && (!cfg.lateFrom || d >= cfg.lateFrom)) {
           r.dedN = (r.dedN || 0) + 1; r.dedMin = (r.dedMin || 0) + realLate;
           if (realLate <= (cfg.tierCut || 30)) { r.tierLowN = (r.tierLowN || 0) + 1; } else { r.tierHighN = (r.tierHighN || 0) + 1; }
@@ -528,13 +528,17 @@ function renderMgrHome() {
 }
 
 /* ======================= points ======================= */
+function cutHM(d, branchId) {   // last minute that still counts as on time (points + lateness), per branch
+  const b = branchId ? branchById(branchId) : null;
+  return (b && b.lateAfter && (!b.lateAfterFrom || d >= b.lateAfterFrom)) ? b.lateAfter : (cfg.starUntil || '15:00');
+}
 function dayPoints(rec) {
   if (!rec || !rec.inAt || !rec.ss) return { p: 0, why: 'none' };
   if (rec.ptsSrv != null && (rec.outAt || rec.autoOut || rec.manual)) return { p: rec.ptsSrv, why: rec.ptsWhy || 'ok' };   // points from real times (server)
   if (rec.manual) return { p: 0, why: 'manual' };
   if (rec.autoOut) return { p: 0, why: 'no_out' };
   const inHM = hmFmt0.format(new Date(rec.inAt));
-  const onTime = inHM <= (cfg.starUntil || '15:00');
+  const onTime = inHM <= cutHM(rec.day, rec.branchId);
   const outOk = !!rec.outAt && (!rec.se || rec.outAt >= rec.se - (Number(cfg.earlyOut) || 0) * 6e4);
   if (!onTime) return { p: 0, why: 'late' };
   if (!outOk) return { p: 0, why: rec.outAt ? 'early_out' : 'no_out' };
