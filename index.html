@@ -349,11 +349,16 @@
           <option value="none">لا يوجد خصم (يُسجَّل فقط)</option>
           <option value="count">خصم أيام حسب عدد مرات التأخير</option>
           <option value="minute">خصم بالدقيقة</option>
+          <option value="tier">مبلغ ثابت لكل مرة تأخير</option>
         </select></div>
       <div class="row3" style="margin-top:10px">
         <div class="lateCount"><label for="sLateN">كل كم مرة تأخير</label><input type="number" id="sLateN" min="1"></div>
         <div class="lateCount"><label for="sLateDays">يُخصم (أيام)</label><input type="number" id="sLateDays" min="0" step="0.25"></div>
         <div class="lateMinute"><label for="sDayHours">ساعات يوم العمل</label><input type="number" id="sDayHours" min="1" step="0.5"></div>
+        <div class="lateTier"><label for="sTierCut">حد التأخير البسيط (دقيقة)</label><input type="number" id="sTierCut" min="1"></div>
+        <div class="lateTier"><label for="sTierLow">خصم التأخير حتى الحد (درهم)</label><input type="number" id="sTierLow" min="0" step="0.5"></div>
+        <div class="lateTier"><label for="sTierHigh">خصم التأخير بعد الحد (درهم)</label><input type="number" id="sTierHigh" min="0" step="0.5"></div>
+        <div class="lateFromF"><label for="sLateFrom">يُطبَّق الخصم من تاريخ</label><input type="date" id="sLateFrom"></div>
       </div>
       <div class="row" style="margin-top:10px">
         <div><label for="sMinShift">أقل وقت بين الحضور والانصراف (دقائق)</label><input type="number" id="sMinShift" min="0" max="600"></div>
