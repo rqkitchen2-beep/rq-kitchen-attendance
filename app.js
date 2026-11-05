@@ -97,7 +97,7 @@ function applyData(d, merge) {
   const st = d.settings || {};
   Object.assign(cfg, { grace: st.grace_min, openLead: st.open_lead_min, payMode: st.pay_mode, workDays: st.work_days,
     bonusAt: st.bonus_at, bonusDays: st.bonus_days, requireApproval: st.require_approval,
-    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0, earlyOut: st.early_out_min == null ? 15 : Number(st.early_out_min), mainTime: hm5(st.main_time) || '14:30', pointValue: Number(st.point_value) || 0, starUntil: hm5(st.star_in_until) || '15:00' });
+    lateMode: st.late_mode || 'none', lateN: Number(st.late_n) || 3, lateDays: Number(st.late_days) || 0, dayHours: Number(st.day_hours) || 10, minShift: Number(st.min_shift_min) || 0, earlyOut: st.early_out_min == null ? 15 : Number(st.early_out_min), mainTime: hm5(st.main_time) || '14:30', pointValue: Number(st.point_value) || 0, starUntil: hm5(st.star_in_until) || '15:00', tierCut: st.tier_cut == null ? 30 : Number(st.tier_cut), tierLow: st.tier_low == null ? 10 : Number(st.tier_low), tierHigh: st.tier_high == null ? 30 : Number(st.tier_high), lateFrom: st.late_from || '' });
   cfg.branches = (d.branches || []).map(mapBranch);
   cfg.employees = isMgr() ? (d.employees || []).map(mapEmp) : [me];
   pay = {}; (d.salaries || []).forEach(r => pay[r.employee_id] = Number(r.monthly));
@@ -464,7 +464,10 @@ function compute(from, to, branchId) {
         const lm = Math.round((rec.inAt - sh.s) / 6e4), isLate = lm > grace;
         if (isLate) { r.lateN++; r.lateMin += lm; }
         const realLate = Math.round((rec.inAt - Math.max(at(d, cfg.starUntil || '15:00'), rec.ss || 0)) / 6e4);
-        if (realLate > 0) { r.dedN = (r.dedN || 0) + 1; r.dedMin = (r.dedMin || 0) + realLate; }
+        if (realLate > 0 && !rec.manual && (!cfg.lateFrom || d >= cfg.lateFrom)) {
+          r.dedN = (r.dedN || 0) + 1; r.dedMin = (r.dedMin || 0) + realLate;
+          if (realLate <= (cfg.tierCut || 30)) { r.tierLowN = (r.tierLowN || 0) + 1; } else { r.tierHighN = (r.tierHighN || 0) + 1; }
+        }
         let w = 0, o = 0;
         if (rec.outAt) { w = (rec.outAt - rec.inAt) / 36e5; o = w - sh.hours; o = o >= 0.25 ? o : 0; r.hours += w; r.ot += o; }
         else if (!(d >= addDays(today, -1) && now - rec.inAt < 20 * 36e5)) r.noOut++;
@@ -490,7 +493,8 @@ function compute(from, to, branchId) {
     } else { r.deductDays = null; r.extraDays = 0; r.base = r.present * daily; }
     const lm = cfg.lateMode || 'none';
     r.lateDeduct = lm === 'count' ? Math.floor((r.dedN || 0) / (Number(cfg.lateN) || 3)) * (Number(cfg.lateDays) || 0) * daily
-      : lm === 'minute' ? (r.dedMin || 0) * daily / ((Number(cfg.dayHours) || 10) * 60) : 0;
+      : lm === 'minute' ? (r.dedMin || 0) * daily / ((Number(cfg.dayHours) || 10) * 60)
+      : lm === 'tier' ? (r.tierLowN || 0) * (Number(cfg.tierLow) || 0) + (r.tierHighN || 0) * (Number(cfg.tierHigh) || 0) : 0;
     const mon = from.slice(0, 7), mine = adjs.filter(a => a.employee_id === e.id && a.month === mon);
     r.adv = mine.filter(a => a.kind === 'advance').reduce((s, a) => s + Number(a.amount), 0);
     r.ded = mine.filter(a => a.kind === 'deduction').reduce((s, a) => s + Number(a.amount), 0);
@@ -589,7 +593,7 @@ async function renderMine() {
      <ul class="list">${dm ? `<li><span>أيام الدوام المطلوبة للراتب الكامل</span><b>${Number(cfg.workDays) || 26}</b></li><li><span>أيام الخصم</span><b>${r.deductDays}</b></li><li><span>أيام زيادة</span><b>${r.extraDays || 0}</b></li>` : ''}
      <li><span>الأساسي المستحق</span><b>${money(r.base)}</b></li>
      ${r.leaveDays ? `<li><span>أيام إجازة معتمدة</span><b>${r.leaveDays}</b></li>` : ''}
-     ${r.lateDeduct ? `<li><span>خصم التأخير (${r.dedN || 0} مرة، ${r.dedMin || 0} د)</span><b>−${money(r.lateDeduct)}</b></li>` : ''}
+     ${r.lateDeduct ? `<li><span>خصم التأخير (${(cfg.lateMode === 'tier') ? `${r.tierLowN || 0} × ${cfg.tierLow} + ${r.tierHighN || 0} × ${cfg.tierHigh}` : `${r.dedN || 0} مرة، ${r.dedMin || 0} د`})</span><b>−${money(r.lateDeduct)}</b></li>` : ''}
      ${adjs.filter(a => a.employee_id === e.id && a.month === from.slice(0, 7)).map(a => `<li><span>${esc(ADJ_LBL[a.kind])}${a.note ? ' · ' + esc(a.note) : ''}</span><b>${a.kind === 'bonus' ? '+' : '−'}${money(Number(a.amount))}</b></li>`).join('')}
      ${r.ptsMoney ? `<li><span>مكافأة النقاط (${r.pts} × ${money(Number(cfg.pointValue))})</span><b>+${money(r.ptsMoney)}</b></li>` : ''}
      <li><span><b>صافي المستحق</b></span><b>${money(r.net)}</b></li></ul>
@@ -885,31 +889,70 @@ $('#ptsNotify').onclick = async () => {
   for (const r of list) { try { await call('att_mgr_notify', { p_emp: r.e.id, p_body: `🌟 أحسنت يا ${r.e.name.split(/\s+/)[0]}! جمعت ${r.pts} نقطة تميّز حتى الآن بالتزامك بمواعيد الحضور والانصراف. استمرارك على ذلك سيتم مكافأتك عليه في نهاية الشهر. Well done! You have ${r.pts} excellence points so far for keeping to your clock-in and clock-out times. Keep it up — you will be rewarded at the end of the month.` }); n++; } catch (e) {} }
   msg(out, 'ok', `تم إرسال التشجيع إلى ${n} موظف.`);
 };
-$('#exportBtn').onclick = async () => {
-  const out = $('#exportMsg'), from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
-  if (typeof XLSX === 'undefined') return msg(out, 'err', 'مكتبة Excel لم تُحمّل بعد. انتظر لحظة وحاول مرة أخرى.');
+async function buildSheets(out) {
+  const from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
+  if (typeof XLSX === 'undefined') { msg(out, 'err', 'مكتبة Excel لم تُحمّل بعد. انتظر لحظة وحاول مرة أخرى.'); return null; }
   if (from < loadedFrom) await ensureFrom(from);
   const { rows, log } = compute(from, to, bid), bn = id => branchById(id)?.name || '', dm = (cfg.payMode || 'deduct') === 'deduct';
   const pr = rows.map(r => { const o = { 'الموظف': r.e.name, 'البريد': r.e.email || '', 'الفروع': bnames(r.e), 'الراتب الشهري': r.salary, 'قيمة اليوم': +r.daily.toFixed(2), 'أيام الحضور': r.present };
     if (dm) { o['أيام الخصم'] = r.deductDays; o['أيام زيادة'] = r.extraDays; } o['الأساسي المستحق'] = +r.base.toFixed(2); o[dm ? 'قيمة الأيام الزيادة' : 'مكافأة الحضور الكامل'] = +r.bonus.toFixed(2); o['أيام إجازة معتمدة'] = r.leaveDays; o['خصم التأخير'] = +r.lateDeduct.toFixed(2); o['سلف'] = r.adv; o['خصومات'] = r.ded; o['مكافآت'] = r.bon; o['النقاط'] = r.pts; o['مكافأة النقاط'] = +r.ptsMoney.toFixed(2); o['صافي المستحق'] = +r.net.toFixed(2); return o; });
+  if (pr.length) { const t = { 'الموظف': TR('الإجمالي') }; ['الراتب الشهري', 'الأساسي المستحق', 'قيمة الأيام الزيادة', 'مكافأة الحضور الكامل', 'خصم التأخير', 'سلف', 'خصومات', 'مكافآت', 'النقاط', 'مكافأة النقاط', 'صافي المستحق'].forEach(k => { if (k in pr[0]) t[k] = +pr.reduce((a, o) => a + (Number(o[k]) || 0), 0).toFixed(2); }); pr.push(t); }
   const sum = rows.map(r => ({ 'الموظف': r.e.name, 'الفروع': bnames(r.e), 'أيام الحضور': r.present, 'أيام الغياب': r.absent, 'مرات التأخير': r.lateN, 'دقائق التأخير': r.lateMin, 'ساعات العمل': +h2(r.hours), 'ساعات إضافية': +h2(r.ot), 'أيام بدون انصراف': r.noOut }));
-  const det = log.sort((a, b) => a.d < b.d ? -1 : 1).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
-  const tk = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
-  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: !EN }] };
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pr)), TR('الرواتب'));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(sum)), TR('الملخص'));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(det)), TR('السجل اليومي'));
+  const det = log.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.e.name.localeCompare(b.e.name)).map(x => ({ 'التاريخ': x.d, 'يوم الأسبوع': DAYS[dow(x.d)], 'الموظف': x.e.name, 'الفرع': x.rec ? bn(x.rec.branchId) : bn(empBranches(x.e)[0]), 'الحالة': x.state + (x.missing ? ' (بدون انصراف)' : ''), 'الحضور': x.rec ? fmtT(x.rec.inAt) : '', 'الانصراف': x.rec ? fmtT(x.rec.outAt) : '', 'دقائق التأخير': x.lm, 'ساعات العمل': +h2(x.w), 'إضافي': +h2(x.o) }));
   const pp = staff().map(e => ({ e, ...pointsFor(e, from, to) })).sort((a, b) => b.pts - a.pts).map((r, i) => ({ '#': i + 1, 'الموظف': r.e.name, 'النقاط': r.pts, 'أيام نقطتين': r.two, 'أيام نقطة': r.one, 'أيام بدون نقاط': r.miss, 'ملتزم بالمواعيد': r.committed ? '✔' : '', 'حضور مبكر متكرر': r.early ? '✔' : '' }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk(pp)), TR('النقاط'));
-  XLSX.writeFile(wb, `RQ-attendance_${from}_${to}.xlsx`);
+  return { from, to, pr, sum, det, pp };
+}
+const tkRows = rows => rows.map(o => { const n = {}; Object.keys(o).forEach(k => n[k === 'اليوم' ? (EN ? 'Day' : k) : TR(k)] = typeof o[k] === 'string' ? TR(o[k]) : o[k]); return n; });
+function addSheet(wb, rows, name) {
+  const ws = XLSX.utils.json_to_sheet(tkRows(rows));
+  const keys = rows.length ? Object.keys(tkRows([rows[0]])[0]) : [];
+  ws['!cols'] = keys.map(k => ({ wch: Math.min(40, Math.max(String(k).length, ...rows.map(o => String(Object.values(o)[keys.indexOf(k)] ?? '').length)) + 2) }));
+  XLSX.utils.book_append_sheet(wb, ws, TR(name));
+}
+async function saveWb(wb, name, out) {
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  let file = null; try { file = new File([buf], name, { type }); } catch (e) {}
+  if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    try { await navigator.share({ files: [file], title: name }); msg(out, 'ok', 'تم تجهيز الملف.'); return; }
+    catch (e) { if (e && e.name === 'AbortError') return msg(out, 'info', 'تم الإلغاء.'); }
+  }
+  const url = URL.createObjectURL(new Blob([buf], { type })), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
   msg(out, 'ok', 'تم تصدير الملف.');
+}
+const newWb = () => { const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: !EN }] }; return wb; };
+$('#exportBtn').onclick = async () => {
+  const out = $('#exportMsg'), x = await buildSheets(out); if (!x) return;
+  const wb = newWb(); addSheet(wb, x.pr, 'الرواتب'); addSheet(wb, x.sum, 'الملخص'); addSheet(wb, x.det, 'السجل اليومي'); addSheet(wb, x.pp, 'النقاط');
+  saveWb(wb, `RQ-attendance_${x.from}_${x.to}.xlsx`, out);
 };
+$('#payXls').onclick = async () => {
+  const out = $('#payExpMsg'), x = await buildSheets(out); if (!x) return;
+  const wb = newWb(); addSheet(wb, x.pr, 'الرواتب'); addSheet(wb, x.pp, 'النقاط');
+  saveWb(wb, `RQ-payroll_${x.from}_${x.to}.xlsx`, out);
+};
+$('#attXls').onclick = async () => {
+  const out = $('#attExpMsg'), x = await buildSheets(out); if (!x) return;
+  const wb = newWb(); addSheet(wb, x.sum, 'الملخص'); addSheet(wb, x.det, 'السجل اليومي');
+  saveWb(wb, `RQ-attendance-log_${x.from}_${x.to}.xlsx`, out);
+};
+function printPanel(id, title) {
+  const p = document.getElementById(id), from = $('#rFrom').value, to = $('#rTo').value, bid = $('#rBranch').value;
+  const hd = document.createElement('div'); hd.className = 'print-head';
+  hd.innerHTML = `<b>RQ Kitchen — ${esc(TR(title))}</b><span>${esc(from)} → ${esc(to)}${bid ? ' · ' + esc(branchById(bid)?.name || '') : ''}</span>`;
+  p.prepend(hd); p.classList.add('print-target'); document.body.classList.add('printing');
+  const done = () => { hd.remove(); p.classList.remove('print-target'); document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done); setTimeout(() => window.print(), 50); setTimeout(done, 60000);
+}
+$('#payPdf').onclick = () => printPanel('secPay', 'الرواتب');
+$('#attPdf').onclick = () => printPanel('secEmpSum', 'ملخص الحضور');
 
 /* ======================= manager: settings ======================= */
 let draft = null, payDraft = {};
 function startDraft() {
   draft = { settings: { grace: cfg.grace, openLead: cfg.openLead, payMode: cfg.payMode, workDays: cfg.workDays, bonusAt: cfg.bonusAt, bonusDays: cfg.bonusDays, requireApproval: cfg.requireApproval,
-      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift, earlyOut: cfg.earlyOut, mainTime: cfg.mainTime, pointValue: cfg.pointValue, starUntil: cfg.starUntil },
+      lateMode: cfg.lateMode, lateN: cfg.lateN, lateDays: cfg.lateDays, dayHours: cfg.dayHours, minShift: cfg.minShift, earlyOut: cfg.earlyOut, mainTime: cfg.mainTime, pointValue: cfg.pointValue, starUntil: cfg.starUntil, tierCut: cfg.tierCut, tierLow: cfg.tierLow, tierHigh: cfg.tierHigh, lateFrom: cfg.lateFrom },
     branches: JSON.parse(JSON.stringify(cfg.branches)), employees: JSON.parse(JSON.stringify(staff().filter(e => e.status === 'active'))) };
   payDraft = Object.assign({}, pay);
 }
@@ -920,6 +963,7 @@ function renderSettings() {
   const S = draft.settings;
   $('#sGrace').value = S.grace; $('#sLead').value = S.openLead; $('#sApprove').checked = !!S.requireApproval;
   $('#sLateMode').value = S.lateMode || 'none'; $('#sLateN').value = S.lateN; $('#sLateDays').value = S.lateDays; $('#sDayHours').value = S.dayHours; $('#sMinShift').value = S.minShift; $('#sEarlyOut').value = S.earlyOut; $('#sMainTime').value = S.mainTime || '14:30'; $('#sPointValue').value = S.pointValue || 0; $('#sStarUntil').value = S.starUntil || '15:00';
+  $('#sTierCut').value = S.tierCut; $('#sTierLow').value = S.tierLow; $('#sTierHigh').value = S.tierHigh; $('#sLateFrom').value = S.lateFrom || '';
   toggleLate(S.lateMode || 'none');
   $('#sMode').value = S.payMode; $('#sBonusAt').value = S.bonusAt; $('#sBonusDays').value = S.bonusDays; $('#sWork').value = S.workDays; toggleMode(S.payMode);
   // pending registrations
@@ -988,11 +1032,15 @@ $('#sApprove').onchange = e => draft && (draft.settings.requireApproval = e.targ
 $('#sMode').onchange = e => { if (draft) { draft.settings.payMode = e.target.value; toggleMode(e.target.value); } };
 $('#sBonusAt').oninput = e => draft && (draft.settings.bonusAt = Number(e.target.value) || 30);
 $('#sBonusDays').oninput = e => draft && (draft.settings.bonusDays = Number(e.target.value) || 0);
-function toggleLate(m) { $$('.lateCount').forEach(x => x.classList.toggle('hidden', m !== 'count')); $$('.lateMinute').forEach(x => x.classList.toggle('hidden', m !== 'minute')); }
+function toggleLate(m) { $$('.lateCount').forEach(x => x.classList.toggle('hidden', m !== 'count')); $$('.lateMinute').forEach(x => x.classList.toggle('hidden', m !== 'minute')); $$('.lateTier').forEach(x => x.classList.toggle('hidden', m !== 'tier')); $$('.lateFromF').forEach(x => x.classList.toggle('hidden', m === 'none')); }
 $('#sLateMode').onchange = e => { if (draft) { draft.settings.lateMode = e.target.value; toggleLate(e.target.value); } };
 $('#sLateN').oninput = e => draft && (draft.settings.lateN = Math.max(1, Number(e.target.value) || 3));
 $('#sLateDays').oninput = e => draft && (draft.settings.lateDays = Math.max(0, Number(e.target.value) || 0));
 $('#sDayHours').oninput = e => draft && (draft.settings.dayHours = Math.max(1, Number(e.target.value) || 10));
+$('#sTierCut').oninput = e => draft && (draft.settings.tierCut = Math.max(1, Number(e.target.value) || 30));
+$('#sTierLow').oninput = e => draft && (draft.settings.tierLow = Math.max(0, Number(e.target.value) || 0));
+$('#sTierHigh').oninput = e => draft && (draft.settings.tierHigh = Math.max(0, Number(e.target.value) || 0));
+$('#sLateFrom').onchange = e => draft && (draft.settings.lateFrom = e.target.value || '');
 $('#sMinShift').oninput = e => draft && (draft.settings.minShift = Math.max(0, Number(e.target.value) || 0));
 $('#sEarlyOut').oninput = e => draft && (draft.settings.earlyOut = Math.max(0, Number(e.target.value) || 0));
 $('#sMainTime').onchange = e => draft && e.target.value && (draft.settings.mainTime = e.target.value);
@@ -1012,7 +1060,7 @@ $('#saveCfg').onclick = async () => {
   try {
     const S = draft.settings;
     await call('att_mgr_settings', { p: { grace_min: S.grace, open_lead_min: S.openLead, pay_mode: S.payMode, work_days: S.workDays, bonus_at: S.bonusAt, bonus_days: S.bonusDays, require_approval: S.requireApproval,
-      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift, early_out_min: S.earlyOut, main_time: S.mainTime, point_value: S.pointValue, star_in_until: S.starUntil } });
+      late_mode: S.lateMode, late_n: S.lateN, late_days: S.lateDays, day_hours: S.dayHours, min_shift_min: S.minShift, early_out_min: S.earlyOut, main_time: S.mainTime, point_value: S.pointValue, star_in_until: S.starUntil, tier_cut: S.tierCut, tier_low: S.tierLow, tier_high: S.tierHigh, late_from: S.lateFrom || '' } });
     const keepIds = draft.branches.map(b => b.id);
     for (const [i, b] of draft.branches.entries()) {
       const row = { name: b.name.trim() || 'فرع', lat: b.lat, lng: b.lng, radius_m: Math.max(5, Number(b.radius) || 10), start_time: b.start || '14:00', end_time: b.end || '00:30', sort: i + 1 };
